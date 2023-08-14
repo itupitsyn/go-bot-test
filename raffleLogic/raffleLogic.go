@@ -15,7 +15,7 @@ import (
 
 var noReturnPoint = time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
 
-var ticker = time.NewTicker(5 * time.Second)
+var ticker = time.NewTicker(60 * time.Second)
 var quit = make(chan struct{})
 
 func Listen() {
@@ -33,8 +33,8 @@ func Listen() {
 }
 
 func IsNoReturnPoint() bool {
-	now := time.Now()
-	checkPoint := time.Date(1970, 1, 1, now.Hour(), now.Minute(), now.Second(), 0, now.Location()).In(time.UTC)
+	now := time.Now().In(time.UTC)
+	checkPoint := time.Date(1970, 1, 1, now.Hour(), now.Minute(), now.Second(), 0, now.Location())
 
 	return checkPoint.After(noReturnPoint)
 }
