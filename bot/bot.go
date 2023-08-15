@@ -4,6 +4,7 @@ import (
 	"os"
 	"telebot/model"
 	"telebot/raffleLogic"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"gorm.io/datatypes"
@@ -41,14 +42,14 @@ func Listen() {
 
 		raffle := model.Raffle{
 			ChatID:       update.Message.Chat.ID,
-			Date:         datatypes.Date(update.Message.Time()),
+			Date:         datatypes.Date(time.Now()),
 			Participants: []model.User{},
 		}
 		raffle.Save()
 
 		participants := model.Raffle{
 			ChatID: update.Message.Chat.ID,
-			Date:   datatypes.Date(update.Message.Time()),
+			Date:   datatypes.Date(time.Now()),
 			Participants: []model.User{
 				usr,
 			},
