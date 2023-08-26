@@ -13,5 +13,5 @@ jobs:
           local: ssh-tst
           remote: scp/single/ssh-tst
           host: ${{ secrets.SERVER_ADDR }}
-          username: ${{ secrets.SERVER_PWD }}
-          password: ${{ secrets.SERVER_USR }}
+          username: ${{ secrets.SERVER_USR }}
+          password: ${{ secrets.SERVER_PWD }}
