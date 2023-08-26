@@ -1,0 +1,17 @@
+name: Deploy Bot
+on:
+  push:
+    branches:
+      - master
+jobs:
+  copy-file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy single file to remote
+        uses: garygrossgarten/github-action-scp@release
+        with:
+          local: ssh-tst
+          remote: scp/single/ssh-tst
+          host: ${{ secrets.SERVER_ADDR }}
+          username: ${{ secrets.SERVER_PWD }}
+          password: ${{ secrets.SERVER_USR }}
