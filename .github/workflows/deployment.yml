@@ -9,10 +9,19 @@ jobs:
     steps:
       - name: Get rep code
         uses: actions/checkout@v3
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+
+      - name: Build
+        run: go build -v ./...
+
       - name: Copy single file to remote
         uses: garygrossgarten/github-action-scp@release
         with:
-          local: ssh-tst
+          local: main
           remote: scp/single/ssh-tst
           host: ${{ secrets.SERVER_ADDR }}
           username: ${{ secrets.SERVER_USR }}
