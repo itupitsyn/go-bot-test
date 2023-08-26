@@ -16,12 +16,12 @@ jobs:
           go-version: '1.20'
 
       - name: Build
-        run: go build -v ./...
+        run: go build -v
 
       - name: Copy single file to remote
         uses: garygrossgarten/github-action-scp@release
         with:
-          local: ./...
+          local: telebot
           remote: scp/single/telebot
           host: ${{ secrets.SERVER_ADDR }}
           username: ${{ secrets.SERVER_USR }}
