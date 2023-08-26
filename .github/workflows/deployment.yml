@@ -4,7 +4,7 @@ on:
     branches:
       - master
 jobs:
-  copy-file:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Get rep code
@@ -22,7 +22,7 @@ jobs:
         uses: garygrossgarten/github-action-scp@release
         with:
           local: telebot
-          remote: scp/single/telebot
+          remote: go-bot-test/telebot
           host: ${{ secrets.SERVER_ADDR }}
           username: ${{ secrets.SERVER_USR }}
           password: ${{ secrets.SERVER_PWD }}
