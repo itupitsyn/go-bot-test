@@ -26,3 +26,13 @@ jobs:
           host: ${{ secrets.SERVER_ADDR }}
           username: ${{ secrets.SERVER_USR }}
           password: ${{ secrets.SERVER_PWD }}
+
+      - name: multiple command
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_ADDR }}
+          username: ${{ secrets.SERVER_USR }}
+          password: ${{ secrets.SERVER_PWD }}
+          script: |
+            chmod +rwx go-bot-test/telebot
+            sudo systemctl restart raffle-bot
