@@ -91,7 +91,7 @@ func sendResultWithPrep(bot *tgbotapi.BotAPI, chatId int64, date datatypes.Date,
 }
 
 func SendResult(bot *tgbotapi.BotAPI, chatId int64, date datatypes.Date, winnerName string) error {
-	prize, err := model.GetPrizeByDate(date)
+	prize, err := model.GetPrizeByDate(date, chatId)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
