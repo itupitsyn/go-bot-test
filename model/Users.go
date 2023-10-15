@@ -12,6 +12,7 @@ type User struct {
 	UpdatedAt time.Time
 	DeletedAt time.Time
 	Raffle    []Raffle `gorm:"foreignKey:WinnerID;"`
+	Admins    []Admin `gorm:"foreignKey:UserID;"`
 }
 
 func (user *User) Save() (*User, error) {
