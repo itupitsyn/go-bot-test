@@ -6,6 +6,7 @@ import (
 	"strings"
 	"telebot/model"
 	"telebot/raffleLogic"
+	"telebot/utils"
 	"time"
 	"unicode/utf8"
 
@@ -79,9 +80,7 @@ func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, msgText)
 	msg.ParseMode = "HTML"
 	_, err := bot.Send(msg)
-	if err != nil {
-		fmt.Println(err)
-	}
+	utils.ProcessSendMessageError(err, update.Message.Chat.ID)
 }
 
 func processParticipation(update tgbotapi.Update) {
@@ -133,9 +132,7 @@ func processPrize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			msg := tgbotapi.NewMessage(chatId, "ПОЗДНО!")
 			msg.ReplyToMessageID = update.Message.MessageID
 			_, err := bot.Send(msg)
-			if err != nil {
-				fmt.Println(err)
-			}
+			utils.ProcessSendMessageError(err, update.Message.Chat.ID)
 			return
 		} else {
 			date = datatypes.Date(time.Now().In(time.UTC))
@@ -157,8 +154,5 @@ func processPrize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	msg := tgbotapi.NewMessage(chatId, "ФИКСИРУЮ, БЛЯДЬ!")
 	msg.ReplyToMessageID = update.Message.MessageID
 	_, err := bot.Send(msg)
-	if err != nil {
-		fmt.Println(err)
-	}
-
+	utils.ProcessSendMessageError(err, chatId)
 }

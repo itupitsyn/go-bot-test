@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"telebot/model"
+	"telebot/utils"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -75,19 +76,19 @@ func runRaffle(currentRaffle *model.Raffle) *model.User {
 }
 
 func sendResultWithPrep(bot *tgbotapi.BotAPI, chatId int64, date datatypes.Date, winnerName string) {
-	_, err := bot.Send(tgbotapi.NewMessage(chatId, fmt.Sprintf("Пора!")))
+	_, err := bot.Send(tgbotapi.NewMessage(chatId, "Пора!"))
+	utils.ProcessSendMessageError(err, chatId)
 	time.Sleep(2 * time.Second)
-	_, err = bot.Send(tgbotapi.NewMessage(chatId, fmt.Sprintf("ПОРАААА!!!")))
+	_, err = bot.Send(tgbotapi.NewMessage(chatId, "ПОРАААА!!!"))
+	utils.ProcessSendMessageError(err, chatId)
 	time.Sleep(2 * time.Second)
-	msg := tgbotapi.NewMessage(chatId, fmt.Sprintf("<tg-spoiler>КРУТИМ, БЛЯДЬ!!!</tg-spoiler>"))
+	msg := tgbotapi.NewMessage(chatId, "<tg-spoiler>КРУТИМ, БЛЯДЬ!!!</tg-spoiler>")
 	msg.ParseMode = "HTML"
 	_, err = bot.Send(msg)
+	utils.ProcessSendMessageError(err, chatId)
 	time.Sleep(5 * time.Second)
 	err = SendResult(bot, chatId, date, winnerName)
-	if err != nil {
-		fmt.Printf("[error] couldn't send message to %d\n", chatId)
-		fmt.Println(err)
-	}
+	utils.ProcessSendMessageError(err, chatId)
 }
 
 func SendResult(bot *tgbotapi.BotAPI, chatId int64, date datatypes.Date, winnerName string) error {
