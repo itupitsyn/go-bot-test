@@ -109,14 +109,56 @@ func processParticipation(update tgbotapi.Update) {
 }
 
 func processPrize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	chatId := update.Message.Chat.ID
 	admin := model.Admin{
-		ChatID: update.Message.Chat.ID,
+		ChatID: chatId,
 		UserID: &update.Message.From.ID,
 	}
+
 	if ok, err := admin.IsAdmin(); !ok {
 		if err != nil {
 			fmt.Println(err)
 		}
 		return
 	}
+
+	phraseParts := strings.Split(strings.ToLower(update.Message.Text), " ")
+	if len(phraseParts) < 2 {
+		return
+	}
+
+	var date datatypes.Date
+	if phraseParts[0] == "сегодня" {
+		if raffleLogic.IsNoReturnPoint() {
+			msg := tgbotapi.NewMessage(chatId, "ПОЗДНО!")
+			msg.ReplyToMessageID = update.Message.MessageID
+			_, err := bot.Send(msg)
+			if err != nil {
+				fmt.Println(err)
+			}
+			return
+		} else {
+			date = datatypes.Date(time.Now().In(time.UTC))
+		}
+	} else {
+		date = datatypes.Date(time.Now().In(time.UTC).AddDate(0, 0, 1))
+	}
+	phraseParts = strings.Split(update.Message.Text, " ")
+	newPrize := strings.Join(phraseParts[1:], " ")
+
+	model.DeletePrizeByDate(date, chatId)
+	prize := model.Prize{
+		Name:   newPrize,
+		ChatID: chatId,
+		Date:   date,
+	}
+	prize.Save()
+
+	msg := tgbotapi.NewMessage(chatId, "ФИКСИРУЮ, БЛЯДЬ!")
+	msg.ReplyToMessageID = update.Message.MessageID
+	_, err := bot.Send(msg)
+	if err != nil {
+		fmt.Println(err)
+	}
+
 }
