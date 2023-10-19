@@ -19,6 +19,8 @@ var noReturnPoint = time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
 var ticker = time.NewTicker(60 * time.Second)
 var quit = make(chan struct{})
 
+var defaultPrizeName = "обыденное нихуя"
+
 func Listen() {
 	for {
 		select {
@@ -91,15 +93,21 @@ func sendResultWithPrep(bot *tgbotapi.BotAPI, chatId int64, date datatypes.Date,
 	utils.ProcessSendMessageError(err, chatId)
 }
 
+func GetPrizeName(prize *model.Prize) string {
+	prizeName := defaultPrizeName
+
+	if prize != nil && prize.Name != "" {
+		prizeName = prize.Name
+	}
+	return prizeName
+}
+
 func SendResult(bot *tgbotapi.BotAPI, chatId int64, date datatypes.Date, winnerName string) error {
 	prize, err := model.GetPrizeByDate(date, chatId)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	prizeName := "обыденное нихуя"
-	if prize.Name != "" {
-		prizeName = prize.Name
-	}
+	prizeName := GetPrizeName(prize)
 	msg := tgbotapi.NewMessage(chatId, fmt.Sprintf("@%s выигрывает %s!!", winnerName, prizeName))
 	_, err = bot.Send(msg)
 	return err

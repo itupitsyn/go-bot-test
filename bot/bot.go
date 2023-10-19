@@ -47,6 +47,8 @@ func Listen() {
 			processStats(bot, update)
 		} else if strings.HasPrefix(msgTextLower, "сегодня") || strings.HasPrefix(msgTextLower, "завтра") {
 			processPrize(bot, update)
+		} else if update.Message.Text == "/prize" || strings.HasPrefix(update.Message.Text, "/prize@"+bot.Self.UserName) {
+			processPrizeInfo(bot, update.Message.Chat.ID)
 		}
 	}
 }
@@ -57,22 +59,16 @@ func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if len(*stats) == 0 {
 		msgText = "There is no stats yet"
 	} else {
-		maxNameLen := utf8.RuneCountInString("winner")
-		maxCountsLen := utf8.RuneCountInString("wins")
-		for _, current := range *stats {
-			currLen := utf8.RuneCountInString(current.Name)
-			if maxNameLen < currLen {
-				maxNameLen = currLen
-			}
-			currLen = utf8.RuneCountInString(fmt.Sprint(current.Count))
-			if maxCountsLen < currLen {
-				maxCountsLen = currLen
-			}
-		}
+		maxNameLen := 17
+		maxCountsLen := 4
 		msgText = "<code>"
 		msgText += fmt.Sprintf("%-*s %*s\n", maxNameLen, "winner", maxCountsLen, "wins")
 		for _, current := range *stats {
-			msgText += fmt.Sprintf("%-*s %*d\n", maxNameLen, current.Name, maxCountsLen, current.Count)
+			currentName := current.Name
+			if utf8.RuneCountInString(currentName) > maxNameLen {
+				currentName = currentName[:maxNameLen - 2] + ".."
+			}
+			msgText += fmt.Sprintf("%-*s %*d\n", maxNameLen, currentName, maxCountsLen, current.Count)
 		}
 		msgText += "</code>"
 	}
@@ -153,6 +149,28 @@ func processPrize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	msg := tgbotapi.NewMessage(chatId, "ФИКСИРУЮ, БЛЯДЬ!")
 	msg.ReplyToMessageID = update.Message.MessageID
+	_, err := bot.Send(msg)
+	utils.ProcessSendMessageError(err, chatId)
+}
+
+func processPrizeInfo(bot *tgbotapi.BotAPI, chatId int64) {
+	year, month, day := time.Now().In(time.UTC).Date()
+	today := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+
+	dates := []datatypes.Date{datatypes.Date(today), datatypes.Date(today.AddDate(0, 0, 1))}
+	prizes, _ := model.GetPrizesByDate(dates, chatId)
+
+	prizeToday := raffleLogic.GetPrizeName(nil)
+	prizeTomorrow := raffleLogic.GetPrizeName(nil)
+	for _, prize := range *prizes {
+		if prize.Date == dates[0] {
+			prizeToday = raffleLogic.GetPrizeName(&prize)
+		} else {
+			prizeTomorrow = raffleLogic.GetPrizeName(&prize)
+		}
+	}
+
+	msg := tgbotapi.NewMessage(chatId, fmt.Sprintf("Сегодня — %s \nЗавтра — %s", prizeToday, prizeTomorrow))
 	_, err := bot.Send(msg)
 	utils.ProcessSendMessageError(err, chatId)
 }
