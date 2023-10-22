@@ -30,4 +30,5 @@ func loadDatabase() {
 	database.Database.AutoMigrate(&model.Prize{})
 	database.Database.AutoMigrate(&model.Raffle{})
 	database.Database.AutoMigrate(&model.Admin{})
+	database.Database.AutoMigrate(&model.Phraze{})
 }
