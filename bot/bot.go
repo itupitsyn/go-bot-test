@@ -57,7 +57,7 @@ func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	stats := model.GetStats(update.Message.Chat.ID)
 	var msgText string
 	if len(*stats) == 0 {
-		msgText = "There is no stats yet"
+		msgText = "Статистики еще нет. Здеся"
 	} else {
 		maxNameLen := 17
 		maxCountsLen := 4
@@ -66,7 +66,7 @@ func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		for _, current := range *stats {
 			currentName := current.Name
 			if utf8.RuneCountInString(currentName) > maxNameLen {
-				currentName = currentName[:maxNameLen - 2] + ".."
+				currentName = currentName[:maxNameLen-2] + ".."
 			}
 			msgText += fmt.Sprintf("%-*s %*d\n", maxNameLen, currentName, maxCountsLen, current.Count)
 		}
@@ -110,15 +110,18 @@ func processPrize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		UserID: &update.Message.From.ID,
 	}
 
-	if ok, err := admin.IsAdmin(); !ok {
-		if err != nil {
-			fmt.Println(err)
-		}
+	phraseParts := strings.Split(strings.ToLower(update.Message.Text), " ")
+	if len(phraseParts) < 2 {
 		return
 	}
 
-	phraseParts := strings.Split(strings.ToLower(update.Message.Text), " ")
-	if len(phraseParts) < 2 {
+	if ok, _ := admin.IsAdmin(); !ok {
+		phraze := raffleLogic.GetRandomPhrazeByKey(raffleLogic.WrongAdminKey)
+		msg := tgbotapi.NewMessage(chatId, phraze)
+		msg.ReplyToMessageID = update.Message.MessageID
+		_, err := bot.Send(msg)
+		utils.ProcessSendMessageError(err, chatId)
+
 		return
 	}
 
@@ -147,7 +150,9 @@ func processPrize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	}
 	prize.Save()
 
-	msg := tgbotapi.NewMessage(chatId, "ФИКСИРУЮ, БЛЯДЬ!")
+	phraze := raffleLogic.GetRandomPhrazeByKey(raffleLogic.AcceptPrizeKey)
+
+	msg := tgbotapi.NewMessage(chatId, phraze)
 	msg.ReplyToMessageID = update.Message.MessageID
 	_, err := bot.Send(msg)
 	utils.ProcessSendMessageError(err, chatId)
