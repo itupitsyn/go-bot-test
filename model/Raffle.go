@@ -36,13 +36,14 @@ func (raffle *Raffle) GetRafflesByDate(date datatypes.Date) ([]Raffle, error) {
 }
 
 type stats struct {
-	Name  string
-	Count int32
+	Name            string
+	Alternativename string
+	Count           int32
 }
 
 func GetStats(chatId int64) *[]stats {
 	var result []stats
 	subQuery := database.Database.Model(&Raffle{}).Select("count (*) as Count, winner_id").Where("winner_id is not null and chat_id = ?", chatId).Group("winner_id")
-	database.Database.Model(&User{}).Select("users.name as Name, kk.Count").Joins("inner join (?) as kk on users.id = kk.winner_id", subQuery).Order("Count desc").Find(&result)
+	database.Database.Model(&User{}).Select("users.name as Name, users.alternative_name as Alternativename, kk.Count").Joins("inner join (?) as kk on users.id = kk.winner_id", subQuery).Order("Count desc").Find(&result)
 	return &result
 }

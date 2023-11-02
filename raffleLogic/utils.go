@@ -29,7 +29,8 @@ func SendResult(bot *tgbotapi.BotAPI, chatId int64, date datatypes.Date, winnerN
 		return err
 	}
 	prizeName := GetPrizeName(prize)
-	msg := tgbotapi.NewMessage(chatId, fmt.Sprintf("@%s выигрывает %s!!", winnerName, prizeName))
+	msg := tgbotapi.NewMessage(chatId, fmt.Sprintf("%s выигрывает %s!!", winnerName, prizeName))
+	msg.ParseMode = "HTML"
 	_, err = bot.Send(msg)
 	return err
 }
