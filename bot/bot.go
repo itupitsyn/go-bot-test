@@ -55,6 +55,7 @@ func Listen() {
 
 func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	stats := model.GetStats(update.Message.Chat.ID)
+
 	var msgText string
 	if len(*stats) == 0 {
 		msgText = "Статистики еще нет. Здеся"
@@ -64,7 +65,12 @@ func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		msgText = "<code>"
 		msgText += fmt.Sprintf("%-*s %*s\n", maxNameLen, "winner", maxCountsLen, "wins")
 		for _, current := range *stats {
-			currentName := current.Name
+			var currentName string
+			if current.Name != "" {
+				currentName = current.Name
+			} else {
+				currentName = current.Alternativename
+			}
 			if utf8.RuneCountInString(currentName) > maxNameLen {
 				currentName = currentName[:maxNameLen-2] + ".."
 			}
@@ -80,9 +86,22 @@ func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 }
 
 func processParticipation(update tgbotapi.Update) {
+	from := update.Message.From
+	name := from.UserName
+	var nameParts []string
+
+	if from.FirstName != "" {
+		nameParts = append(nameParts, from.FirstName)
+	}
+	if from.LastName != "" {
+		nameParts = append(nameParts, from.LastName)
+	}
+	alternativeName := strings.Join(nameParts, "")
+
 	usr := model.User{
-		ID:   update.Message.From.ID,
-		Name: update.Message.From.UserName,
+		ID:            from.ID,
+		Name:          name,
+		AlternativeName: alternativeName,
 	}
 	usr.Save()
 

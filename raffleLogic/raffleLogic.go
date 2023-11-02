@@ -1,6 +1,7 @@
 package raffleLogic
 
 import (
+	"fmt"
 	"math/rand"
 	"os"
 	"telebot/model"
@@ -56,7 +57,14 @@ func runRaffles() ([]model.Raffle, error) {
 		if winner == nil {
 			continue
 		}
-		go sendResultWithPrep(bot, currentRaffle.ChatID, raffleDate, winner.Name)
+		var name string
+		if winner.Name != "" {
+			name = "@" + winner.Name
+		} else {
+			name = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", winner.ID, winner.AlternativeName)
+		}
+
+		go sendResultWithPrep(bot, currentRaffle.ChatID, raffleDate, name)
 	}
 
 	return raffles, err
