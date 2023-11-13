@@ -45,7 +45,7 @@ func Listen() {
 		msgTextLower := strings.ToLower(update.Message.Text)
 		if update.Message.Text == "/stats" || strings.HasPrefix(update.Message.Text, "/stats@"+bot.Self.UserName) {
 			processStats(bot, update)
-		} else if strings.HasPrefix(msgTextLower, "сегодня") || strings.HasPrefix(msgTextLower, "завтра") {
+		} else if strings.HasPrefix(msgTextLower, "сегодня ") || strings.HasPrefix(msgTextLower, "завтра ") {
 			processPrize(bot, update)
 		} else if update.Message.Text == "/prize" || strings.HasPrefix(update.Message.Text, "/prize@"+bot.Self.UserName) {
 			processPrizeInfo(bot, update.Message.Chat.ID)
