@@ -35,14 +35,23 @@ func (raffle *Raffle) GetRafflesByDate(date datatypes.Date) ([]Raffle, error) {
 	return raffles, err
 }
 
-type stats struct {
+type Stats struct {
 	Name            string
 	Alternativename string
 	Count           int32
 }
 
-func GetStats(chatId int64) *[]stats {
-	var result []stats
+func GetStats(chatId int64) *[]Stats {
+	var result []Stats
+	now := time.Now().In(time.UTC)
+	beginningOfYear := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	subQuery := database.Database.Model(&Raffle{}).Select("count (*) as Count, winner_id").Where("winner_id is not null and chat_id = ? and date > ?", chatId, beginningOfYear).Group("winner_id")
+	database.Database.Model(&User{}).Select("users.name as Name, users.alternative_name as Alternativename, kk.Count").Joins("inner join (?) as kk on users.id = kk.winner_id", subQuery).Order("Count desc").Find(&result)
+	return &result
+}
+
+func GetFullStats(chatId int64) *[]Stats {
+	var result []Stats
 	subQuery := database.Database.Model(&Raffle{}).Select("count (*) as Count, winner_id").Where("winner_id is not null and chat_id = ?", chatId).Group("winner_id")
 	database.Database.Model(&User{}).Select("users.name as Name, users.alternative_name as Alternativename, kk.Count").Joins("inner join (?) as kk on users.id = kk.winner_id", subQuery).Order("Count desc").Find(&result)
 	return &result

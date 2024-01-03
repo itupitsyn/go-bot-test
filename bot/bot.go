@@ -44,7 +44,9 @@ func Listen() {
 
 		msgTextLower := strings.ToLower(update.Message.Text)
 		if update.Message.Text == "/stats" || strings.HasPrefix(update.Message.Text, "/stats@"+bot.Self.UserName) {
-			processStats(bot, update)
+			processStats(bot, update, false)
+		} else if update.Message.Text == "/stats_full" || strings.HasPrefix(update.Message.Text, "/stats_full@"+bot.Self.UserName) {
+			processStats(bot, update, true)
 		} else if strings.HasPrefix(msgTextLower, "сегодня ") || strings.HasPrefix(msgTextLower, "завтра ") {
 			processPrize(bot, update)
 		} else if update.Message.Text == "/prize" || strings.HasPrefix(update.Message.Text, "/prize@"+bot.Self.UserName) {
@@ -53,8 +55,13 @@ func Listen() {
 	}
 }
 
-func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	stats := model.GetStats(update.Message.Chat.ID)
+func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update, full bool) {
+	var stats *[]model.Stats
+	if full {
+		stats = model.GetFullStats(update.Message.Chat.ID)
+	} else {
+		stats = model.GetStats(update.Message.Chat.ID)
+	}
 
 	var msgText string
 	if len(*stats) == 0 {
@@ -99,8 +106,8 @@ func processParticipation(update tgbotapi.Update) {
 	alternativeName := strings.Join(nameParts, "")
 
 	usr := model.User{
-		ID:            from.ID,
-		Name:          name,
+		ID:              from.ID,
+		Name:            name,
 		AlternativeName: alternativeName,
 	}
 	usr.Save()
