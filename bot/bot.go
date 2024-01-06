@@ -232,7 +232,7 @@ func checkSetCommandInitiator(bot *tgbotapi.BotAPI, update tgbotapi.Update) erro
 	).First(&superAdminChatUserRole); result.Error != nil {
 		_, err := bot.Send(tgbotapi.NewMessage(chatId, "Тебе нельзя так делать!"))
 		utils.ProcessSendMessageError(err, chatId)
-		return err
+		return result.Error
 	}
 	return nil
 }
