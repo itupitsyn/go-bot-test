@@ -45,5 +45,14 @@ func loadDatabase() {
 	if err := database.Database.AutoMigrate(&model.Phraze{}); err != nil {
 		log.Fatal("Error migrating Phraze", err)
 	}
+	if err := database.Database.AutoMigrate(&model.Role{}); err != nil {
+		log.Fatal("Error migrating Role", err)
+	}
+	if err := database.Database.AutoMigrate(&model.ChatUserRole{}); err != nil {
+		log.Fatal("Error migrating ChatUserRole", err)
+	}
 	log.Println("Successfully migrated all tables")
+	if err := model.PopulateRoles(); err != nil {
+		log.Fatal("Error populating roles", err)
+	}
 }

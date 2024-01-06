@@ -37,7 +37,7 @@ func Listen() {
 
 func IsNoReturnPoint() bool {
 	now := time.Now().UTC()
-	return now.Hour() > 12
+	return now.Hour() > 18
 }
 
 func runRaffles() ([]model.Raffle, error) {

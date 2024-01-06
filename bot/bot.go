@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"telebot/database"
 	"telebot/model"
 	"telebot/raffleLogic"
 	"telebot/utils"
@@ -46,6 +47,7 @@ func Listen() {
 			processParticipation(update)
 		}
 
+		// TODO: All of this should be handled via Commands https://pkg.go.dev/gopkg.in/tucnak/telebot.v2#readme-commands
 		msgTextLower := strings.ToLower(update.Message.Text)
 		if update.Message.Text == "/stats" || strings.HasPrefix(update.Message.Text, "/stats@"+bot.Self.UserName) {
 			log.Println("Stats requested by", update.Message.From.UserName)
@@ -59,6 +61,12 @@ func Listen() {
 		} else if update.Message.Text == "/prize" || strings.HasPrefix(update.Message.Text, "/prize@"+bot.Self.UserName) {
 			log.Println("Prize info requested by", update.Message.From.UserName)
 			processPrizeInfo(bot, update.Message.Chat.ID)
+		} else if strings.HasPrefix(update.Message.Text, "/set_admin") || strings.HasPrefix(update.Message.Text, "/set_admin@"+bot.Self.UserName) {
+			log.Println("Setting admin requested by", update.Message.From.UserName)
+			processSetAdmin(bot, update)
+		} else if strings.HasPrefix(update.Message.Text, "/unset_admin") || strings.HasPrefix(update.Message.Text, "/unset_admin@"+bot.Self.UserName) {
+			log.Println("Unsetting admin requested by", update.Message.From.UserName)
+			processUnsetAdmin(bot, update)
 		}
 	}
 	log.Println("Bot stopped listening")
@@ -141,9 +149,8 @@ func processParticipation(update tgbotapi.Update) {
 
 func processPrize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	chatId := update.Message.Chat.ID
-	admin := model.Admin{
-		ChatID: chatId,
-		UserID: &update.Message.From.ID,
+	user := model.User{
+		ID: update.Message.From.ID,
 	}
 
 	phraseParts := strings.Split(strings.ToLower(update.Message.Text), " ")
@@ -151,7 +158,7 @@ func processPrize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		return
 	}
 
-	if ok, _ := admin.IsAdmin(); !ok {
+	if !user.CanCreatePrize(chatId) {
 		phraze := raffleLogic.GetRandomPhrazeByKey(raffleLogic.WrongAdminKey)
 		msg := tgbotapi.NewMessage(chatId, phraze)
 		msg.ReplyToMessageID = update.Message.MessageID
@@ -213,5 +220,106 @@ func processPrizeInfo(bot *tgbotapi.BotAPI, chatId int64) {
 
 	msg := tgbotapi.NewMessage(chatId, fmt.Sprintf("Сегодня — %s \nЗавтра — %s", prizeToday, prizeTomorrow))
 	_, err := bot.Send(msg)
+	utils.ProcessSendMessageError(err, chatId)
+}
+
+func checkSetCommandInitiator(bot *tgbotapi.BotAPI, update tgbotapi.Update) error {
+	initiatorUserId := update.Message.From.ID
+	chatId := update.Message.Chat.ID
+	superAdminChatUserRole := model.ChatUserRole{}
+	if result := database.Database.Where(
+		"chat_id = ? AND user_id = ? AND role_id = ?", chatId, initiatorUserId, model.SuperAdminRoleID,
+	).First(&superAdminChatUserRole); result.Error != nil {
+		_, err := bot.Send(tgbotapi.NewMessage(chatId, "Тебе нельзя так делать!"))
+		utils.ProcessSendMessageError(err, chatId)
+		return err
+	}
+	return nil
+}
+
+func getSetCommandUserID(bot *tgbotapi.BotAPI, update tgbotapi.Update) (int64, error) {
+	chatId := update.Message.Chat.ID
+	command := update.Message.Text
+	parts := strings.Split(command, " ")
+	if len(parts) < 2 {
+		_, err := bot.Send(tgbotapi.NewMessage(chatId, "Неверная команда"))
+		utils.ProcessSendMessageError(err, chatId)
+		return 0, fmt.Errorf("invalid command: %s", command)
+	}
+	userName := strings.Trim(parts[1], "@ ")
+	user := model.User{}
+	userResult := database.Database.Model(&model.User{}).Where("name = ?", userName).First(&user)
+	if userResult.Error != nil {
+		_, err := bot.Send(tgbotapi.NewMessage(chatId, "Такого члена чята нет!"))
+		utils.ProcessSendMessageError(err, chatId)
+		return 0, userResult.Error
+	}
+	// TODO: We should also check if mentioned user is actually a member of our chat
+	return user.ID, nil
+}
+
+func setUserRoleViaCommand(bot *tgbotapi.BotAPI, userId int64, chatId int64, roleID int64) error {
+	chatUserRole := &model.ChatUserRole{
+		ChatID: chatId,
+		UserID: userId,
+	}
+	chatUserRoleResult := database.Database.First(&chatUserRole)
+	if chatUserRoleResult.Error != nil {
+		log.Println("No role found, creating new one", chatUserRoleResult.Error)
+		chatUserRole := model.ChatUserRole{
+			ChatID: chatId,
+			UserID: userId,
+			RoleID: roleID,
+		}
+		if _, err := chatUserRole.Save(); err != nil {
+			log.Println("Error creating role", err)
+			return err
+		}
+	} else {
+		if chatUserRole.RoleID == model.SuperAdminRoleID {
+			_, err := bot.Send(tgbotapi.NewMessage(chatId, "Ты гэта не трогай його!"))
+			utils.ProcessSendMessageError(err, chatId)
+			return fmt.Errorf("user %d is super admin", userId)
+		}
+		chatUserRole.RoleID = roleID
+		if _, err := chatUserRole.Save(); err != nil {
+			log.Println("Error creating role", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func processSetAdmin(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	if checkSetCommandInitiator(bot, update) != nil {
+		return
+	}
+	chatId := update.Message.Chat.ID
+	userId, err := getSetCommandUserID(bot, update)
+	if err != nil {
+		return
+	}
+	err = setUserRoleViaCommand(bot, userId, chatId, model.PrizeCreatorRoleID)
+	if err != nil {
+		return
+	}
+	_, err = bot.Send(tgbotapi.NewMessage(chatId, "Одминка выдана!"))
+	utils.ProcessSendMessageError(err, chatId)
+}
+
+func processUnsetAdmin(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	if checkSetCommandInitiator(bot, update) != nil {
+		return
+	}
+	chatId := update.Message.Chat.ID
+	userId, err := getSetCommandUserID(bot, update)
+	if err != nil {
+		return
+	}
+	err = setUserRoleViaCommand(bot, userId, chatId, model.PlayerRoleID)
+	if err != nil {
+		return
+	}
+	_, err = bot.Send(tgbotapi.NewMessage(chatId, "Одминка отобрана!"))
 	utils.ProcessSendMessageError(err, chatId)
 }
