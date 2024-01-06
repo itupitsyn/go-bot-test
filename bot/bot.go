@@ -67,6 +67,9 @@ func Listen() {
 		} else if strings.HasPrefix(update.Message.Text, "/unset_admin") || strings.HasPrefix(update.Message.Text, "/unset_admin@"+bot.Self.UserName) {
 			log.Println("Unsetting admin requested by", update.Message.From.UserName)
 			processUnsetAdmin(bot, update)
+		} else if strings.HasPrefix(update.Message.Text, "/admins") || strings.HasPrefix(update.Message.Text, "/admins@"+bot.Self.UserName) {
+			log.Println("Admins requested by", update.Message.From.UserName)
+			processAdmins(bot, update)
 		}
 	}
 	log.Println("Bot stopped listening")
@@ -322,5 +325,53 @@ func processUnsetAdmin(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		return
 	}
 	_, err = bot.Send(tgbotapi.NewMessage(chatId, "Одминка отобрана!"))
+	utils.ProcessSendMessageError(err, chatId)
+}
+
+func processAdmins(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	chatId := update.Message.Chat.ID
+
+	// TODO: Proper solution is left join, but it's time consuming to implement
+
+	var chatUserRoles []model.ChatUserRole
+	chatUserRoleResult := database.Database.Where(
+		"chat_id = ? AND role_id IN (?, ?)", chatId, model.SuperAdminRoleID, model.PrizeCreatorRoleID,
+	).Order("role_id asc").Find(&chatUserRoles)
+	if chatUserRoleResult.Error != nil || len(chatUserRoles) == 0 {
+		_, err := bot.Send(tgbotapi.NewMessage(chatId, "Админов нет!"))
+		utils.ProcessSendMessageError(err, chatId)
+		return
+	}
+	log.Printf("%#v", chatUserRoles)
+
+	msgText := "<code>\n"
+	msgText += "Одмины:\n"
+	var user_ids []int64 = []int64{}
+	for _, chatUserRole := range chatUserRoles {
+		user_ids = append(user_ids, chatUserRole.UserID)
+	}
+	var users []model.User
+	database.Database.Find(&users, user_ids)
+
+	userByUserID := make(map[int64]model.User)
+	for _, user := range users {
+		userByUserID[user.ID] = user
+	}
+
+	for _, chatUserRole := range chatUserRoles {
+		roleID := chatUserRole.RoleID
+		user := userByUserID[chatUserRole.UserID]
+		var role string = "хз кто"
+		if roleID == model.SuperAdminRoleID {
+			role = "superadmin"
+		} else if roleID == model.PrizeCreatorRoleID {
+			role = "admin"
+		}
+		msgText += fmt.Sprintf("%s (%s)\n", user.Name, role)
+	}
+	msgText += "</code>"
+	msg := tgbotapi.NewMessage(chatId, msgText)
+	msg.ParseMode = "HTML"
+	_, err := bot.Send(msg)
 	utils.ProcessSendMessageError(err, chatId)
 }

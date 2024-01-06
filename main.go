@@ -29,6 +29,7 @@ func loadDatabase() {
 		log.Fatal("Error connecting to the database", err)
 	}
 	log.Println("Successfully connected to the database")
+
 	log.Println("Migrating all tables...")
 	if err := database.Database.AutoMigrate(&model.User{}); err != nil {
 		log.Fatal("Error migrating User", err)
@@ -52,6 +53,7 @@ func loadDatabase() {
 		log.Fatal("Error migrating ChatUserRole", err)
 	}
 	log.Println("Successfully migrated all tables")
+
 	if err := model.PopulateRoles(); err != nil {
 		log.Fatal("Error populating roles", err)
 	}
