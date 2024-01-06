@@ -1,8 +1,10 @@
 package raffleLogic
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
+	"log"
+	"math/big"
 	"os"
 	"telebot/model"
 	"telebot/utils"
@@ -11,8 +13,6 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"gorm.io/datatypes"
 )
-
-var noReturnPoint = time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
 
 var ticker = time.NewTicker(60 * time.Second)
 var quit = make(chan struct{})
@@ -24,20 +24,20 @@ func Listen() {
 		select {
 		case <-ticker.C:
 			if IsNoReturnPoint() {
+				log.Println("No return point, running raffles...")
 				runRaffles()
 			}
 		case <-quit:
 			ticker.Stop()
+			log.Println("Raffle logic stopped")
 			return
 		}
 	}
 }
 
 func IsNoReturnPoint() bool {
-	now := time.Now().In(time.UTC)
-	checkPoint := time.Date(1970, 1, 1, now.Hour(), now.Minute(), now.Second(), 0, now.Location())
-
-	return checkPoint.After(noReturnPoint)
+	now := time.Now().UTC()
+	return now.Hour() > 12
 }
 
 func runRaffles() ([]model.Raffle, error) {
@@ -75,8 +75,11 @@ func runRaffle(currentRaffle *model.Raffle) *model.User {
 	if currentRaffle.WinnerID != nil || participantsCount < 2 {
 		return nil
 	}
-	winnerIdx := rand.Intn(participantsCount)
-	winner := currentRaffle.Participants[winnerIdx]
+	winnerIdx, err := rand.Int(rand.Reader, big.NewInt(int64(participantsCount)))
+	if err != nil {
+		panic(err)
+	}
+	winner := currentRaffle.Participants[winnerIdx.Int64()]
 	currentRaffle.WinnerID = &winner.ID
 	currentRaffle.Save()
 	return &winner
