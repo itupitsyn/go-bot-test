@@ -41,7 +41,11 @@ func GetRandomPhrazeByKey(key string) string {
 		fmt.Println(err)
 	}
 	if phrazes != nil {
-		phrazeIdx := rand.Intn(len(*phrazes))
+		count := len(*phrazes)
+		if count < 1 {
+			return ""
+		}
+		phrazeIdx := rand.Intn(count)
 		return (*phrazes)[phrazeIdx].Value
 	}
 	return ""

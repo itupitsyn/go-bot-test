@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"telebot/model"
@@ -28,10 +29,12 @@ func Listen() {
 	// Start polling Telegram for updates.
 	updates := bot.GetUpdatesChan(updateConfig)
 
+	log.Println("Listening for messages...")
 	for update := range updates {
 		if update.Message == nil {
 			continue
 		}
+		log.Println("Received message from", update.Message.From.UserName)
 
 		msgType := update.Message.Chat.Type
 		if msgType != "group" && msgType != "supergroup" {
@@ -39,20 +42,26 @@ func Listen() {
 		}
 
 		if !raffleLogic.IsNoReturnPoint() {
+			log.Println("Running processParticipation")
 			processParticipation(update)
 		}
 
 		msgTextLower := strings.ToLower(update.Message.Text)
 		if update.Message.Text == "/stats" || strings.HasPrefix(update.Message.Text, "/stats@"+bot.Self.UserName) {
+			log.Println("Stats requested by", update.Message.From.UserName)
 			processStats(bot, update, false)
 		} else if update.Message.Text == "/stats_full" || strings.HasPrefix(update.Message.Text, "/stats_full@"+bot.Self.UserName) {
+			log.Println("Full stats requested by", update.Message.From.UserName)
 			processStats(bot, update, true)
 		} else if strings.HasPrefix(msgTextLower, "сегодня ") || strings.HasPrefix(msgTextLower, "завтра ") {
+			log.Println("Prize requested by", update.Message.From.UserName)
 			processPrize(bot, update)
 		} else if update.Message.Text == "/prize" || strings.HasPrefix(update.Message.Text, "/prize@"+bot.Self.UserName) {
+			log.Println("Prize info requested by", update.Message.From.UserName)
 			processPrizeInfo(bot, update.Message.Chat.ID)
 		}
 	}
+	log.Println("Bot stopped listening")
 }
 
 func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update, full bool) {
@@ -95,6 +104,7 @@ func processStats(bot *tgbotapi.BotAPI, update tgbotapi.Update, full bool) {
 func processParticipation(update tgbotapi.Update) {
 	from := update.Message.From
 	name := from.UserName
+	log.Println("Participation requested by", name)
 	var nameParts []string
 
 	if from.FirstName != "" {

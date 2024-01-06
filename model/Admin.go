@@ -20,8 +20,7 @@ func (admin *Admin) Save() (*Admin, error) {
 }
 
 func (admin *Admin) IsAdmin() (bool, error) {
-	var found Admin
-	err := database.Database.Model(&Admin{}).Where("chat_id = ? and user_id = ?", admin.ChatID, admin.UserID).First(&found).Error
+	err := database.Database.First(admin).Error
 
 	return err == nil, err
 }

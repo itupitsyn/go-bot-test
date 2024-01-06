@@ -1,5 +1,5 @@
 # Use an official Golang runtime as a parent image
-FROM golang:latest
+FROM golang:1.21.5-bookworm as builder
 
 # Set the working directory to /app
 WORKDIR /app
@@ -10,11 +10,15 @@ COPY . /app
 # Download and install any required dependencies
 RUN go mod download
 
-# Build the Go app
-RUN go build -o main .
+# Build the Go app statically
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o main .
 
-# Expose port 8080 for incoming traffic
-EXPOSE 8080
+# Outer layer with binaries only
+FROM scratch
+
+COPY --from=builder /app/main /bot
+COPY --from=builder /app/.env.local /.env.local
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Define the command to run the app when the container starts
-CMD ["/app/main"]
+CMD ["/bot"]
