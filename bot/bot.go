@@ -140,6 +140,7 @@ func processParticipation(update tgbotapi.Update) {
 	participants := model.Raffle{
 		ChatID: update.Message.Chat.ID,
 		Date:   datatypes.Date(time.Now()),
+		Name:   update.Message.Chat.Title,
 		Participants: []model.User{
 			usr,
 		},
