@@ -10,6 +10,7 @@ import (
 type Raffle struct {
 	Date         datatypes.Date `gorm:"primaryKey"`
 	ChatID       int64          `gorm:"primaryKey"`
+	Name         string         `gorm:"size:255;"`
 	Participants []User         `gorm:"many2many:participants;"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
