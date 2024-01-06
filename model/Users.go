@@ -7,7 +7,7 @@ import (
 
 type User struct {
 	ID              int64  `gorm:"primaryKey"`
-	Name            string `gorm:"uniqueIndex,size:255;not null" json:"name"`
+	Name            string `gorm:"index:idx_name,size:255;not null" json:"name"`
 	AlternativeName string `gorm:"size:255;not null;default:''"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
