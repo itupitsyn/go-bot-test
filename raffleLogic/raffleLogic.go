@@ -24,7 +24,6 @@ func Listen() {
 		select {
 		case <-ticker.C:
 			if IsNoReturnPoint() {
-				log.Println("No return point, running raffles...")
 				runRaffles()
 			}
 		case <-quit:
