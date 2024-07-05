@@ -23,7 +23,7 @@ jobs:
         uses: appleboy/scp-action@v0.1.7
         with:
           source: telebot
-          target: go-bot-test/telebot
+          target: go-bot-test
           host: ${{ secrets.SERVER_ADDR }}
           username: ${{ secrets.SERVER_USR }}
           password: ${{ secrets.SERVER_PWD }}
