@@ -41,8 +41,11 @@ func Listen() {
 		msgTextLower := strings.ToLower(update.Message.Text)
 
 		if strings.HasPrefix(msgTextLower, "нарисуй ") || strings.HasPrefix(msgTextLower, "draw ") {
-			log.Println("Painting requested by", update.Message.From.UserName)
-			processPainting(bot, update)
+			log.Println("Image generation requested by", update.Message.From.UserName)
+			processImageGeneration(bot, update)
+		} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+bot.Self.UserName) {
+			log.Println("AI help requested by", update.Message.From.UserName)
+			processAIHelp(bot, update)
 		}
 
 		msgType := update.Message.Chat.Type
@@ -56,25 +59,25 @@ func Listen() {
 		}
 
 		// TODO: All of this should be handled via Commands https://pkg.go.dev/gopkg.in/tucnak/telebot.v2#readme-commands
-		if update.Message.Text == "/stats" || strings.HasPrefix(update.Message.Text, "/stats@"+bot.Self.UserName) {
+		if msgTextLower == "/stats" || strings.HasPrefix(msgTextLower, "/stats@"+bot.Self.UserName) {
 			log.Println("Stats requested by", update.Message.From.UserName)
 			processStats(bot, update, false)
-		} else if update.Message.Text == "/stats_full" || strings.HasPrefix(update.Message.Text, "/stats_full@"+bot.Self.UserName) {
+		} else if msgTextLower == "/stats_full" || strings.HasPrefix(msgTextLower, "/stats_full@"+bot.Self.UserName) {
 			log.Println("Full stats requested by", update.Message.From.UserName)
 			processStats(bot, update, true)
 		} else if strings.HasPrefix(msgTextLower, "сегодня ") || strings.HasPrefix(msgTextLower, "завтра ") {
 			log.Println("Prize requested by", update.Message.From.UserName)
 			processPrize(bot, update)
-		} else if update.Message.Text == "/prize" || strings.HasPrefix(update.Message.Text, "/prize@"+bot.Self.UserName) {
+		} else if msgTextLower == "/prize" || strings.HasPrefix(msgTextLower, "/prize@"+bot.Self.UserName) {
 			log.Println("Prize info requested by", update.Message.From.UserName)
 			processPrizeInfo(bot, update.Message.Chat.ID)
-		} else if strings.HasPrefix(update.Message.Text, "/set_admin") || strings.HasPrefix(update.Message.Text, "/set_admin@"+bot.Self.UserName) {
+		} else if strings.HasPrefix(msgTextLower, "/set_admin") || strings.HasPrefix(msgTextLower, "/set_admin@"+bot.Self.UserName) {
 			log.Println("Setting admin requested by", update.Message.From.UserName)
 			processSetAdmin(bot, update)
-		} else if strings.HasPrefix(update.Message.Text, "/unset_admin") || strings.HasPrefix(update.Message.Text, "/unset_admin@"+bot.Self.UserName) {
+		} else if strings.HasPrefix(msgTextLower, "/unset_admin") || strings.HasPrefix(msgTextLower, "/unset_admin@"+bot.Self.UserName) {
 			log.Println("Unsetting admin requested by", update.Message.From.UserName)
 			processUnsetAdmin(bot, update)
-		} else if strings.HasPrefix(update.Message.Text, "/admins") || strings.HasPrefix(update.Message.Text, "/admins@"+bot.Self.UserName) {
+		} else if strings.HasPrefix(msgTextLower, "/admins") || strings.HasPrefix(msgTextLower, "/admins@"+bot.Self.UserName) {
 			log.Println("Admins requested by", update.Message.From.UserName)
 			processAdmins(bot, update)
 		}
@@ -149,7 +152,7 @@ func processParticipation(update tgbotapi.Update) {
 	participants.Save()
 }
 
-func processPainting(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+func processImageGeneration(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	go aiApi.GetImage(bot, update)
 }
 
@@ -374,6 +377,15 @@ func processAdmins(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	msgText += "</code>"
 	msg := tgbotapi.NewMessage(chatId, msgText)
 	msg.ParseMode = "HTML"
+	_, err := bot.Send(msg)
+	utils.ProcessSendMessageError(err, chatId)
+}
+
+func processAIHelp(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	chatId := update.Message.Chat.ID
+
+	msg := tgbotapi.NewMessage(chatId, "draw [prompt] [optional:anime | realistic]")
+	msg.ReplyToMessageID = update.Message.MessageID
 	_, err := bot.Send(msg)
 	utils.ProcessSendMessageError(err, chatId)
 }
