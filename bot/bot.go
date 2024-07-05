@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"telebot/aiApi"
 	"telebot/database"
 	"telebot/model"
 	"telebot/raffleLogic"
@@ -37,6 +38,13 @@ func Listen() {
 		}
 		log.Println("Received message from", update.Message.From.UserName)
 
+		msgTextLower := strings.ToLower(update.Message.Text)
+
+		if strings.HasPrefix(msgTextLower, "нарисуй ") || strings.HasPrefix(msgTextLower, "draw ") {
+			log.Println("Painting requested by", update.Message.From.UserName)
+			processPainting(bot, update)
+		}
+
 		msgType := update.Message.Chat.Type
 		if msgType != "group" && msgType != "supergroup" {
 			continue
@@ -48,7 +56,6 @@ func Listen() {
 		}
 
 		// TODO: All of this should be handled via Commands https://pkg.go.dev/gopkg.in/tucnak/telebot.v2#readme-commands
-		msgTextLower := strings.ToLower(update.Message.Text)
 		if update.Message.Text == "/stats" || strings.HasPrefix(update.Message.Text, "/stats@"+bot.Self.UserName) {
 			log.Println("Stats requested by", update.Message.From.UserName)
 			processStats(bot, update, false)
@@ -116,20 +123,11 @@ func processParticipation(update tgbotapi.Update) {
 	from := update.Message.From
 	name := from.UserName
 	log.Println("Participation requested by", name)
-	var nameParts []string
-
-	if from.FirstName != "" {
-		nameParts = append(nameParts, from.FirstName)
-	}
-	if from.LastName != "" {
-		nameParts = append(nameParts, from.LastName)
-	}
-	alternativeName := strings.Join(nameParts, "")
 
 	usr := model.User{
 		ID:              from.ID,
 		Name:            name,
-		AlternativeName: alternativeName,
+		AlternativeName: utils.GetAlternativeName(from),
 	}
 	usr.Save()
 
@@ -149,6 +147,10 @@ func processParticipation(update tgbotapi.Update) {
 		},
 	}
 	participants.Save()
+}
+
+func processPainting(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	go aiApi.GetImage(bot, update)
 }
 
 func processPrize(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
