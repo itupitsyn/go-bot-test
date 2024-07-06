@@ -61,8 +61,8 @@ func getWSConnection(bot *tgbotapi.BotAPI, update tgbotapi.Update) (*websocket.C
 
 		msg := tgbotapi.NewMessage(chatId, "Нет, сервер подох")
 		msg.ReplyToMessageID = update.Message.MessageID
-		_, err = bot.Send(msg)
-		utils.ProcessSendMessageError(err, chatId)
+		_, botError := bot.Send(msg)
+		utils.ProcessSendMessageError(botError, chatId)
 		return nil, err
 	}
 
