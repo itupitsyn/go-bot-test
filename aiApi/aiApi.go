@@ -33,6 +33,7 @@ type msgImageGeneratedRespons struct {
 
 var animeSuffix = " anime"
 var realisticSuffix = " realistic"
+var cyberpunkSuffix = " cyberpunk"
 
 func sendWaitMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	chatId := update.Message.Chat.ID
@@ -109,9 +110,10 @@ func initiateImageGeneration(bot *tgbotapi.BotAPI, update tgbotapi.Update, hash 
 
 	animeMeassageTemplate := "{\"data\":[null,false,\"%s\",\"\",[\"Fooocus V2\",\"Fooocus Semi Realistic\",\"Fooocus Masterpiece\"],\"Speed\",\"896×1152 <span style=\\\"color: grey;\\\"> ∣ 7:9</span>\",1,\"png\",\"5154941903248311516\",false,2,6,\"animaPencilXL_v310.safetensors\",\"None\",0.5,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,false,\"uov\",\"Disabled\",null,[],null,\"\",null,false,false,false,false,1.5,0.8,0.3,7,2,\"dpmpp_2m_sde_gpu\",\"karras\",\"Default (model)\",-1,-1,-1,-1,-1,-1,false,false,false,false,64,128,\"joint\",0.25,false,1.01,1.02,0.99,0.95,false,false,\"v2.6\",1,0.618,false,false,0,false,\"fooocus\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\"],\"event_data\":null,\"fn_index\":46,\"session_hash\":\"%s\"}"
 	realisticMessageTemplate := "{\"data\":[null,false,\"%s\",\"unrealistic, saturated, high contrast, big nose, painting, drawing, sketch, cartoon, anime, manga, render, CG, 3d, watermark, signature, label\",[\"Fooocus V2\",\"Fooocus Photograph\",\"Fooocus Negative\"],\"Speed\",\"896×1152 <span style=\\\"color: grey;\\\"> ∣ 7:9</span>\",1,\"png\",\"2680825016842652469\",false,2,3,\"realisticStockPhoto_v20.safetensors\",\"None\",0.5,true,\"SDXL_FILM_PHOTOGRAPHY_STYLE_BetaV0.4.safetensors\",0.25,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,false,\"uov\",\"Disabled\",null,[],null,\"\",null,false,false,false,false,1.5,0.8,0.3,7,2,\"dpmpp_2m_sde_gpu\",\"karras\",\"Default (model)\",-1,-1,-1,-1,-1,-1,false,false,false,false,64,128,\"joint\",0.25,false,1.01,1.02,0.99,0.95,false,false,\"v2.6\",1,0.618,false,false,0,false,\"fooocus\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\"],\"event_data\":null,\"fn_index\":46,\"session_hash\":\"%s\"}"
+	cyberpunkMessgaeTemplate := "{\"data\":[null,false,\"%s\",\"\",[\"Game Cyberpunk Game\"],\"Speed\",\"1152×896 <span style=\\\"color: grey;\\\"> ∣ 9:7</span>\",1,\"png\",\"5147145625488773432\",false,2,4,\"juggernautXL_v8Rundiffusion.safetensors\",\"None\",0.5,true,\"sd_xl_offset_example-lora_1.0.safetensors\",0.1,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,false,\"uov\",\"Disabled\",null,[],null,\"\",null,false,false,false,false,1.5,0.8,0.3,7,2,\"dpmpp_2m_sde_gpu\",\"karras\",\"Default (model)\",-1,-1,-1,-1,-1,-1,false,false,false,false,64,128,\"joint\",0.25,false,1.01,1.02,0.99,0.95,false,false,\"v2.6\",1,0.618,false,false,0,false,\"fooocus\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\"],\"event_data\":null,\"fn_index\":46,\"session_hash\":\"%s\"}"
 	initialMessageTemplate := "{\"data\":[null,false,\"%s\",\"\",[\"Fooocus V2\",\"Fooocus Enhance\",\"Fooocus Sharp\"],\"Speed\",\"1152×896 <span style=\\\"color: grey;\\\"> ∣ 9:7</span>\",1,\"png\",\"6992129825663615429\",false,2,4,\"juggernautXL_v8Rundiffusion.safetensors\",\"None\",0.5,true,\"sd_xl_offset_example-lora_1.0.safetensors\",0.1,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,false,\"uov\",\"Disabled\",null,[],null,\"\",null,false,false,false,false,1.5,0.8,0.3,7,2,\"dpmpp_2m_sde_gpu\",\"karras\",\"Default (model)\",-1,-1,-1,-1,-1,-1,false,false,false,false,64,128,\"joint\",0.25,false,1.01,1.02,0.99,0.95,false,false,\"v2.6\",1,0.618,false,false,0,false,\"fooocus\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\"],\"event_data\":null,\"fn_index\":46,\"session_hash\":\"%s\"}"
 
-	text := update.Message.Text
+	text := strings.ToLower(update.Message.Text)
 
 	var messageTemplate string
 	if strings.HasSuffix(text, animeSuffix) {
@@ -120,14 +122,15 @@ func initiateImageGeneration(bot *tgbotapi.BotAPI, update tgbotapi.Update, hash 
 	} else if strings.HasSuffix(text, realisticSuffix) {
 		messageTemplate = realisticMessageTemplate
 		text, _ = strings.CutSuffix(text, realisticSuffix)
+	} else if strings.HasSuffix(text, cyberpunkSuffix) {
+		messageTemplate = cyberpunkMessgaeTemplate
+		text, _ = strings.CutSuffix(text, cyberpunkSuffix)
 	} else {
 		messageTemplate = initialMessageTemplate
 	}
 
 	text, _ = strings.CutPrefix(text, "draw ")
 	text, _ = strings.CutPrefix(text, "нарисуй ")
-
-	println(text)
 
 	messageText = fmt.Sprintf(messageTemplate, text, hash)
 	err = c.WriteMessage(websocket.TextMessage, []byte(messageText))
