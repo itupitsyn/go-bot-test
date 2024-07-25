@@ -54,7 +54,7 @@ func sendWaitMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 func getWSConnection(bot *tgbotapi.BotAPI, update tgbotapi.Update) (*websocket.Conn, error) {
 	chatId := update.Message.Chat.ID
-	u := url.URL{Scheme: "ws", Host: os.Getenv("AI_PAINTER_HOST"), Path: "/queue/join"}
+	u := url.URL{Scheme: "wss", Host: os.Getenv("AI_PAINTER_HOST"), Path: "/queue/join"}
 	log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
