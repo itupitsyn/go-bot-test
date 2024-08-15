@@ -12,9 +12,9 @@ import (
 	"telebot/utils"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	tgbotapi "github.com/matterbridge/telegram-bot-api/v6"
 )
 
 type msgResponse struct {
@@ -251,17 +251,25 @@ func processGenerationResult(bot *tgbotapi.BotAPI, update tgbotapi.Update, hash 
 
 	chatId := update.Message.Chat.ID
 
-	msg := tgbotapi.NewPhoto(chatId, photoFileBytes)
+	media := tgbotapi.InputMediaPhoto{}
+	media.Media = photoFileBytes
+	media.Type = "photo"
+	media.HasSpoiler = true
 
 	from := update.Message.From
 	if from.UserName != "" {
-		msg.Caption = fmt.Sprintf("@%s", from.UserName)
+		media.ParseMode = "HTML"
+		media.Caption = fmt.Sprintf("@%s", from.UserName)
 	} else {
-		msg.ParseMode = "HTML"
-		msg.Caption = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
+		media.Caption = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
 	}
 
-	_, err = bot.Send(msg)
+	var files []interface{}
+	files = append(files, media)
+
+	config := tgbotapi.NewMediaGroup(chatId, files)
+
+	_, err = bot.SendMediaGroup(config)
 	utils.ProcessSendMessageError(err, chatId)
 
 }

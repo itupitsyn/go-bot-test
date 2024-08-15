@@ -10,7 +10,7 @@ import (
 	"telebot/utils"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbotapi "github.com/matterbridge/telegram-bot-api/v6"
 	"gorm.io/datatypes"
 )
 
