@@ -384,7 +384,7 @@ func processAdmins(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 func processAIHelp(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	chatId := update.Message.Chat.ID
 
-	msg := tgbotapi.NewMessage(chatId, "draw [prompt] [optional:anime | realistic | cyberpunk | meha]")
+	msg := tgbotapi.NewMessage(chatId, "[draw | нарисуй] [prompt] [optional: anime | realistic | cyberpunk | meha | аниме | реалистично | киберпанк | меха]")
 	msg.ReplyToMessageID = update.Message.MessageID
 	_, err := bot.Send(msg)
 	utils.ProcessSendMessageError(err, chatId)

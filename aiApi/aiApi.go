@@ -1,6 +1,8 @@
 package aiApi
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -33,9 +35,13 @@ type msgImageGeneratedRespons struct {
 }
 
 var animeSuffix = " anime"
+var animeSuffixRu = " аниме"
 var realisticSuffix = " realistic"
+var realisticSuffixRu = " реалистично"
 var cyberpunkSuffix = " cyberpunk"
+var cyberpunkSuffixRu = " киберпанк"
 var mehaSuffix = " meha"
+var mehaSuffixRu = " меха"
 
 func sendWaitMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	chatId := update.Message.Chat.ID
@@ -124,18 +130,22 @@ func initiateImageGeneration(bot *tgbotapi.BotAPI, update tgbotapi.Update, hash 
 	text := strings.ToLower(update.Message.Text)
 
 	var messageTemplate string
-	if strings.HasSuffix(text, animeSuffix) {
+	if strings.HasSuffix(text, animeSuffix) || strings.HasSuffix(text, animeSuffixRu) {
 		messageTemplate = animeMeassageTemplate
 		text, _ = strings.CutSuffix(text, animeSuffix)
-	} else if strings.HasSuffix(text, realisticSuffix) {
+		text, _ = strings.CutSuffix(text, animeSuffixRu)
+	} else if strings.HasSuffix(text, realisticSuffix) || strings.HasSuffix(text, realisticSuffixRu) {
 		messageTemplate = realisticMessageTemplate
 		text, _ = strings.CutSuffix(text, realisticSuffix)
-	} else if strings.HasSuffix(text, cyberpunkSuffix) {
+		text, _ = strings.CutSuffix(text, realisticSuffixRu)
+	} else if strings.HasSuffix(text, cyberpunkSuffix) || strings.HasSuffix(text, cyberpunkSuffixRu) {
 		messageTemplate = cyberpunkMessageTemplate
 		text, _ = strings.CutSuffix(text, cyberpunkSuffix)
-	} else if strings.HasSuffix(text, mehaSuffix) {
+		text, _ = strings.CutSuffix(text, cyberpunkSuffixRu)
+	} else if strings.HasSuffix(text, mehaSuffix) || strings.HasSuffix(text, mehaSuffixRu) {
 		messageTemplate = mehaMessageTemplate
 		text, _ = strings.CutSuffix(text, mehaSuffix)
+		text, _ = strings.CutSuffix(text, mehaSuffixRu)
 	} else {
 		messageTemplate = initialMessageTemplate
 	}
@@ -143,28 +153,32 @@ func initiateImageGeneration(bot *tgbotapi.BotAPI, update tgbotapi.Update, hash 
 	text, _ = strings.CutPrefix(text, "draw ")
 	text, _ = strings.CutPrefix(text, "нарисуй ")
 
-	messageText = fmt.Sprintf(messageTemplate, text, randomPart, hash)
+	translatedText, err := translatePrompt(text)
+	if err != nil {
+		log.Println("Error translating prompt")
+		return false
+	}
+	fmt.Println(translatedText)
+
+	messageText = fmt.Sprintf(messageTemplate, strings.ReplaceAll(translatedText, "\"", "\\\""), randomPart, hash)
 	err = c.WriteMessage(websocket.TextMessage, []byte(messageText))
+	defer c.Close()
 	if err != nil {
 		log.Println("Error sending prompt")
-		defer c.Close()
 		return false
 	}
 
 	_ = c.ReadJSON(data) // process_starts
 	if data.Msg != "process_starts" {
 		log.Printf("Error parsing data from server (%s)\n", "process_starts")
-		defer c.Close()
 		return false
 	}
 
 	_ = c.ReadJSON(data) // process_completed
 	if data.Msg != "process_completed" {
 		log.Printf("Error parsing data from server (%s)\n", "process_completed")
-		defer c.Close()
 		return false
 	}
-	defer c.Close()
 
 	return true
 }
@@ -277,6 +291,27 @@ func processGenerationResult(bot *tgbotapi.BotAPI, update tgbotapi.Update, hash 
 	_, err = bot.SendMediaGroup(config)
 	utils.ProcessSendMessageError(err, chatId)
 
+}
+
+func translatePrompt(text string) (string, error) {
+	requestBody := []byte(fmt.Sprintf(`{"model":"goekdenizguelmez/josiefied-qwen2.5-1.5b-instruct-abliterated-v1","messages":[{"role":"system","content":"Если эта фраза на русском, переведи её на английский. В противном случае оставь как есть. Формат вывода только результат."},{"role":"user","content":"%s"}], "stream":false}`, text))
+
+	res, err := http.Post(fmt.Sprintf("%s/api/chat", os.Getenv("AI_LLM_URL")), "application/json", bytes.NewReader(requestBody))
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+	defer res.Body.Close()
+
+	resBody, _ := io.ReadAll(res.Body)
+	resBytes := []byte(resBody)              // Converting the string "res" into byte array
+	var jsonRes map[string]interface{}       // declaring a map for key names as string and values as interface
+	err = json.Unmarshal(resBytes, &jsonRes) // Unmarshalling
+	if err != nil {
+		return "", err
+	}
+
+	return jsonRes["message"].(map[string]interface{})["content"].(string), err
 }
 
 func GetImage(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
