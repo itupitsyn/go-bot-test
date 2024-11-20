@@ -294,7 +294,7 @@ func processGenerationResult(bot *tgbotapi.BotAPI, update tgbotapi.Update, hash 
 }
 
 func translatePrompt(text string) (string, error) {
-	requestBody := []byte(fmt.Sprintf(`{"model":"goekdenizguelmez/josiefied-qwen2.5-1.5b-instruct-abliterated-v1","messages":[{"role":"system","content":"Если эта фраза на русском, переведи её на английский. В противном случае оставь как есть. Формат вывода только результат."},{"role":"user","content":"%s"}], "stream":false}`, text))
+	requestBody := []byte(fmt.Sprintf(`{"model":"goekdenizguelmez/josiefied-qwen2.5-7b-abliterated-v2","messages":[{"role":"system","content":"Если эта фраза на русском, переведи её на английский. В противном случае оставь как есть. Формат вывода только результат."},{"role":"user","content":"%s"}], "stream":false}`, text))
 
 	res, err := http.Post(fmt.Sprintf("%s/api/chat", os.Getenv("AI_LLM_URL")), "application/json", bytes.NewReader(requestBody))
 	if err != nil {
