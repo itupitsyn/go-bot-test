@@ -64,12 +64,14 @@ func processImgGenerationError(ctx context.Context, b *bot.Bot, update *models.U
 }
 
 func processCallbackQuery(ctx context.Context, b *bot.Bot, update *models.Update) {
-	hash := string(uuid.NewString()[:8])
-	success := initiateImageGeneration(ctx, b, update, hash)
-	if !success {
-		return
-	}
-	processGenerationResult(ctx, b, update, hash)
+	go func() {
+		hash := string(uuid.NewString()[:8])
+		success := initiateImageGeneration(ctx, b, update, hash)
+		if !success {
+			return
+		}
+		processGenerationResult(ctx, b, update, hash)
+	}()
 }
 
 func processGenerationResult(ctx context.Context, b *bot.Bot, update *models.Update, hash string) {
