@@ -3,10 +3,10 @@ module telebot
 go 1.20
 
 require (
+	github.com/go-telegram/bot v1.15.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
-	github.com/matterbridge/telegram-bot-api/v6 v6.5.0
 	gorm.io/datatypes v1.2.0
 	gorm.io/driver/postgres v1.5.2
 	gorm.io/gorm v1.25.2

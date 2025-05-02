@@ -1,16 +1,19 @@
 package raffleLogic
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"log"
 	"math/big"
 	"os"
+	"os/signal"
 	"telebot/model"
 	"telebot/utils"
 	"time"
 
-	tgbotapi "github.com/matterbridge/telegram-bot-api/v6"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 	"gorm.io/datatypes"
 )
 
@@ -40,8 +43,7 @@ func IsNoReturnPoint() bool {
 }
 
 func runRaffles() ([]model.Raffle, error) {
-
-	bot, err := tgbotapi.NewBotAPI(os.Getenv("TELEGRAM_APITOKEN"))
+	b, err := bot.New(os.Getenv("TELEGRAM_APITOKEN"))
 	if err != nil {
 		panic(err)
 	}
@@ -63,7 +65,7 @@ func runRaffles() ([]model.Raffle, error) {
 			name = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", winner.ID, winner.AlternativeName)
 		}
 
-		go sendResultWithPrep(bot, currentRaffle.ChatID, raffleDate, name)
+		go sendResultWithPrep(b, currentRaffle.ChatID, raffleDate, name)
 	}
 
 	return raffles, err
@@ -84,18 +86,32 @@ func runRaffle(currentRaffle *model.Raffle) *model.User {
 	return &winner
 }
 
-func sendResultWithPrep(bot *tgbotapi.BotAPI, chatId int64, date datatypes.Date, winnerName string) {
-	_, err := bot.Send(tgbotapi.NewMessage(chatId, "Пора!"))
+func sendResultWithPrep(b *bot.Bot, chatId int64, date datatypes.Date, winnerName string) {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatId,
+		Text:   "Пора!",
+	})
+	utils.ProcessSendMessageError(err, chatId)
+
+	time.Sleep(2 * time.Second)
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatId,
+		Text:   "ПОРАААА!!!",
+	})
+
 	utils.ProcessSendMessageError(err, chatId)
 	time.Sleep(2 * time.Second)
-	_, err = bot.Send(tgbotapi.NewMessage(chatId, "ПОРАААА!!!"))
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    chatId,
+		Text:      "<tg-spoiler>КРУТИМ, БЛЯДЬ!!!</tg-spoiler>",
+		ParseMode: models.ParseModeHTML,
+	})
 	utils.ProcessSendMessageError(err, chatId)
-	time.Sleep(2 * time.Second)
-	msg := tgbotapi.NewMessage(chatId, "<tg-spoiler>КРУТИМ, БЛЯДЬ!!!</tg-spoiler>")
-	msg.ParseMode = "HTML"
-	_, err = bot.Send(msg)
-	utils.ProcessSendMessageError(err, chatId)
+
 	time.Sleep(5 * time.Second)
-	err = SendResult(bot, chatId, date, winnerName)
+	err = SendResult(ctx, b, chatId, date, winnerName)
 	utils.ProcessSendMessageError(err, chatId)
 }

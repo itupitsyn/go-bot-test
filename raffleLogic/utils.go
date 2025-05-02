@@ -1,12 +1,14 @@
 package raffleLogic
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand"
 	"telebot/model"
 
-	tgbotapi "github.com/matterbridge/telegram-bot-api/v6"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -23,15 +25,20 @@ func GetPrizeName(prize *model.Prize) string {
 	return prizeName
 }
 
-func SendResult(bot *tgbotapi.BotAPI, chatId int64, date datatypes.Date, winnerName string) error {
+func SendResult(ctx context.Context, b *bot.Bot, chatId int64, date datatypes.Date, winnerName string) error {
 	prize, err := model.GetPrizeByDate(date, chatId)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 	prizeName := GetPrizeName(prize)
-	msg := tgbotapi.NewMessage(chatId, fmt.Sprintf("%s выигрывает %s!!", winnerName, prizeName))
-	msg.ParseMode = "HTML"
-	_, err = bot.Send(msg)
+
+	msgText := fmt.Sprintf("%s выигрывает %s!!", winnerName, prizeName)
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    chatId,
+		Text:      msgText,
+		ParseMode: models.ParseModeHTML,
+	})
+
 	return err
 }
 

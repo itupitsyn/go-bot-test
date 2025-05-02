@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	tgbotapi "github.com/matterbridge/telegram-bot-api/v6"
+	"github.com/go-telegram/bot/models"
 )
 
 func ProcessSendMessageError(err error, chatId int64) {
@@ -14,7 +14,7 @@ func ProcessSendMessageError(err error, chatId int64) {
 	}
 }
 
-func GetAlternativeName(user *tgbotapi.User) string {
+func GetAlternativeName(user *models.User) string {
 	var nameParts []string
 
 	if user.FirstName != "" {
