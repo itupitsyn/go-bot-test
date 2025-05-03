@@ -1,9 +1,12 @@
 package bot
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"strings"
 	"telebot/aiApi"
 	"telebot/database"
@@ -95,7 +98,79 @@ func processParticipation(update *models.Update) {
 }
 
 func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update) {
-	go aiApi.GetImage(ctx, b, update)
+	chatId := update.Message.Chat.ID
+
+	sendWaitMessage := func() {
+		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatId,
+			Text:   "Ладно",
+		})
+		utils.ProcessSendMessageError(err, chatId)
+
+		time.Sleep(2 * time.Second)
+
+		_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatId,
+			Text:   "Жди теперь",
+		})
+		utils.ProcessSendMessageError(err, chatId)
+	}
+
+	processImgGenerationError := func() {
+		chatId := update.Message.Chat.ID
+		_, botError := b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatId,
+			Text:   "Отмена, сервер подох",
+		})
+		utils.ProcessSendMessageError(botError, chatId)
+	}
+
+	go sendWaitMessage()
+
+	go func() {
+		url, err := aiApi.GetImage(update.Message.Text)
+		if err != nil {
+			log.Println("[error] error generating image")
+			processImgGenerationError()
+			return
+		}
+
+		response, err := http.Get(url)
+		if err != nil {
+			log.Println("[error] error getting generated image")
+			processImgGenerationError()
+			return
+		}
+
+		defer response.Body.Close()
+
+		imageBytes, e := io.ReadAll(response.Body)
+		if e != nil {
+			log.Println("[error] error reading generated image")
+			processImgGenerationError()
+			return
+		}
+
+		photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
+		from := update.Message.From
+		if from.Username != "" {
+			photo.ParseMode = "HTML"
+			photo.Caption = fmt.Sprintf("@%s", from.Username)
+		} else {
+			photo.Caption = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
+		}
+
+		_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
+			ChatID: chatId,
+			Media:  []models.InputMedia{photo},
+		})
+
+		if err != nil {
+			processImgGenerationError()
+		}
+		utils.ProcessSendMessageError(err, chatId)
+	}()
+
 }
 
 func processPrize(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -240,7 +315,7 @@ func setUserRoleViaCommand(ctx context.Context, b *bot.Bot, userId int64, chatId
 			RoleID: roleID,
 		}
 		if _, err := chatUserRole.Save(); err != nil {
-			log.Println("Error creating role", err)
+			log.Println("[error] error creating role", err)
 			return err
 		}
 	} else {
@@ -254,7 +329,7 @@ func setUserRoleViaCommand(ctx context.Context, b *bot.Bot, userId int64, chatId
 		}
 		chatUserRole.RoleID = roleID
 		if _, err := chatUserRole.Save(); err != nil {
-			log.Println("Error creating role", err)
+			log.Println("[error] error creating role", err)
 			return err
 		}
 	}

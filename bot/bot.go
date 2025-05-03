@@ -14,6 +14,10 @@ import (
 
 var botName string = ""
 
+var queries = safeQueryMap{
+	value: make(map[string]callbackQueryData),
+}
+
 func handler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if update.InlineQuery != nil {
 		processInlineQuery(ctx, b, update)
