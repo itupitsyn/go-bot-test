@@ -100,22 +100,6 @@ func processParticipation(update *models.Update) {
 func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 
-	sendWaitMessage := func() {
-		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatId,
-			Text:   "Ладно",
-		})
-		utils.ProcessSendMessageError(err, chatId)
-
-		time.Sleep(2 * time.Second)
-
-		_, err = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatId,
-			Text:   "Жди теперь",
-		})
-		utils.ProcessSendMessageError(err, chatId)
-	}
-
 	processImgGenerationError := func() {
 		chatId := update.Message.Chat.ID
 		_, botError := b.SendMessage(ctx, &bot.SendMessageParams{
@@ -125,52 +109,47 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		utils.ProcessSendMessageError(botError, chatId)
 	}
 
-	go sendWaitMessage()
+	url, err := aiApi.GetImage(update.Message.Text)
+	if err != nil {
+		log.Println("[error] error generating image")
+		processImgGenerationError()
+		return
+	}
 
-	go func() {
-		url, err := aiApi.GetImage(update.Message.Text)
-		if err != nil {
-			log.Println("[error] error generating image")
-			processImgGenerationError()
-			return
-		}
+	response, err := http.Get(url)
+	if err != nil {
+		log.Println("[error] error getting generated image")
+		processImgGenerationError()
+		return
+	}
 
-		response, err := http.Get(url)
-		if err != nil {
-			log.Println("[error] error getting generated image")
-			processImgGenerationError()
-			return
-		}
+	defer response.Body.Close()
 
-		defer response.Body.Close()
+	imageBytes, e := io.ReadAll(response.Body)
+	if e != nil {
+		log.Println("[error] error reading generated image")
+		processImgGenerationError()
+		return
+	}
 
-		imageBytes, e := io.ReadAll(response.Body)
-		if e != nil {
-			log.Println("[error] error reading generated image")
-			processImgGenerationError()
-			return
-		}
+	photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
+	from := update.Message.From
+	if from.Username != "" {
+		photo.ParseMode = "HTML"
+		photo.Caption = fmt.Sprintf("@%s", from.Username)
+	} else {
+		photo.Caption = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
+	}
 
-		photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
-		from := update.Message.From
-		if from.Username != "" {
-			photo.ParseMode = "HTML"
-			photo.Caption = fmt.Sprintf("@%s", from.Username)
-		} else {
-			photo.Caption = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
-		}
+	_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
+		ChatID: chatId,
+		Media:  []models.InputMedia{photo},
+	})
 
-		_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
-			ChatID: chatId,
-			Media:  []models.InputMedia{photo},
-		})
-
-		if err != nil {
-			processImgGenerationError()
-		}
-		utils.ProcessSendMessageError(err, chatId)
-	}()
-
+	if err != nil {
+		processImgGenerationError()
+	}
+	utils.ProcessSendMessageError(err, chatId)
 }
 
 func processPrize(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -349,7 +328,7 @@ func processSetAdmin(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if err != nil {
 		return
 	}
-	// _, err = bot.Send(tgbotapi.NewMessage(chatId, "Одминка выдана!"))
+
 	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatId,
 		Text:   "Одминка выдана!",
