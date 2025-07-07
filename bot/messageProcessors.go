@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"telebot/aiApi"
-	"telebot/database"
 	"telebot/model"
 	"telebot/raffleLogic"
 	"telebot/utils"
@@ -239,17 +238,16 @@ func processPrizeInfo(ctx context.Context, b *bot.Bot, chatId int64) {
 func checkSetCommandInitiator(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	initiatorUserId := update.Message.From.ID
 	chatId := update.Message.Chat.ID
-	superAdminChatUserRole := model.ChatUserRole{}
-	if result := database.Database.Where(
-		"chat_id = ? AND user_id = ? AND role_id = ?", chatId, initiatorUserId, model.SuperAdminRoleID,
-	).First(&superAdminChatUserRole); result.Error != nil {
+
+	if ok, saError := model.IsSuperAdmin(chatId, initiatorUserId); !ok {
 		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatId,
 			Text:   "Запрещено!",
 		})
 		utils.ProcessSendMessageError(err, chatId)
-		return result.Error
+		return saError
 	}
+
 	return nil
 }
 
@@ -266,28 +264,24 @@ func getSetCommandUserID(ctx context.Context, b *bot.Bot, update *models.Update)
 		return 0, fmt.Errorf("invalid command: %s", command)
 	}
 	userName := strings.Trim(parts[1], "@ ")
-	user := model.User{}
-	userResult := database.Database.Model(&model.User{}).Where("name = ?", userName).First(&user)
-	if userResult.Error != nil {
+	user, userByNameErr := model.GetUserByName(userName)
+	if userByNameErr != nil {
 		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatId,
 			Text:   "Такого члена чята нет!",
 		})
 		utils.ProcessSendMessageError(err, chatId)
-		return 0, userResult.Error
+		return 0, userByNameErr
 	}
 	// TODO: We should also check if mentioned user is actually a member of our chat
 	return user.ID, nil
 }
 
 func setUserRoleViaCommand(ctx context.Context, b *bot.Bot, userId int64, chatId int64, roleID int64) error {
-	chatUserRole := &model.ChatUserRole{
-		ChatID: chatId,
-		UserID: userId,
-	}
-	chatUserRoleResult := database.Database.First(&chatUserRole)
-	if chatUserRoleResult.Error != nil {
-		log.Println("No role found, creating new one", chatUserRoleResult.Error)
+	chatUserRole, firstChatUserError := model.GetFirstChatUserRole(chatId, userId)
+
+	if firstChatUserError != nil {
+		log.Println("No role found, creating new one", firstChatUserError)
 		chatUserRole := model.ChatUserRole{
 			ChatID: chatId,
 			UserID: userId,
@@ -362,11 +356,9 @@ func processAdmins(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 	// TODO: Proper solution is left join, but it's time consuming to implement
 
-	var chatUserRoles []model.ChatUserRole
-	chatUserRoleResult := database.Database.Where(
-		"chat_id = ? AND role_id IN (?, ?)", chatId, model.SuperAdminRoleID, model.PrizeCreatorRoleID,
-	).Order("role_id asc").Find(&chatUserRoles)
-	if chatUserRoleResult.Error != nil || len(chatUserRoles) == 0 {
+	chatUserRoles, chatAdminsError := model.GetChatAdmins(chatId)
+
+	if chatAdminsError != nil || len(chatUserRoles) == 0 {
 		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatId,
 			Text:   "Админов нет!",
@@ -382,8 +374,7 @@ func processAdmins(ctx context.Context, b *bot.Bot, update *models.Update) {
 	for _, chatUserRole := range chatUserRoles {
 		user_ids = append(user_ids, chatUserRole.UserID)
 	}
-	var users []model.User
-	database.Database.Find(&users, user_ids)
+	users := model.GetUsersByIds(user_ids)
 
 	userByUserID := make(map[int64]model.User)
 	for _, user := range users {

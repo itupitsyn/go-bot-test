@@ -1,8 +1,6 @@
 package model
 
 import (
-	"telebot/database"
-
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -15,7 +13,7 @@ type Prize struct {
 }
 
 func (prize *Prize) Save() (*Prize, error) {
-	err := database.Database.Save(&prize).Error
+	err := db.Save(&prize).Error
 	if err != nil {
 		return &Prize{}, err
 	}
@@ -24,19 +22,19 @@ func (prize *Prize) Save() (*Prize, error) {
 
 func GetPrizeByDate(date datatypes.Date, chatId int64) (*Prize, error) {
 	var result Prize
-	err := database.Database.Model(Prize{}).Where("date = ? AND chat_id = ?", date, chatId).First(&result).Error
+	err := db.Model(Prize{}).Where("date = ? AND chat_id = ?", date, chatId).First(&result).Error
 
 	return &result, err
 }
 
 func GetPrizesByDate(dates []datatypes.Date, chatId int64) (*[]Prize, error) {
 	var result []Prize
-	err := database.Database.Model(Prize{}).Where("date in (?) AND chat_id = ?", dates, chatId).Find(&result).Error
+	err := db.Model(Prize{}).Where("date in (?) AND chat_id = ?", dates, chatId).Find(&result).Error
 
 	return &result, err
 }
 
 func DeletePrizeByDate(date datatypes.Date, chatId int64) error {
-	err := database.Database.Model(Prize{}).Where("date = ? AND chat_id = ?", date, chatId).Unscoped().Delete(&Prize{}).Error
+	err := db.Model(Prize{}).Where("date = ? AND chat_id = ?", date, chatId).Unscoped().Delete(&Prize{}).Error
 	return err
 }

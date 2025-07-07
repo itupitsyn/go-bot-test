@@ -1,9 +1,6 @@
 package model
 
-import (
-	"telebot/database"
-	"time"
-)
+import "time"
 
 type User struct {
 	ID              int64  `gorm:"primaryKey"`
@@ -18,7 +15,7 @@ type User struct {
 }
 
 func (user *User) Save() (*User, error) {
-	err := database.Database.Save(&user).Error
+	err := db.Save(&user).Error
 	if err != nil {
 		return &User{}, err
 	}
@@ -26,13 +23,27 @@ func (user *User) Save() (*User, error) {
 }
 
 func (user *User) CanCreatePrize(chatID int64) bool {
-	return database.Database.Model(&ChatUserRole{}).Where(
+	return db.Model(&ChatUserRole{}).Where(
 		"user_id = ? AND chat_id = ? AND role_id IN (?, ?)", user.ID, chatID, SuperAdminRoleID, PrizeCreatorRoleID,
 	).First(&ChatUserRole{}).Error == nil
 }
 
 func (user *User) IsSuperAdmin(chatID int64) bool {
-	return database.Database.Model(&ChatUserRole{}).Where(
+	return db.Model(&ChatUserRole{}).Where(
 		"user_id = ? AND chat_id = ? AND role_id = ?", user.ID, chatID, SuperAdminRoleID,
 	).First(&ChatUserRole{}).Error == nil
+}
+
+func GetUserByName(userName string) (*User, error) {
+	user := &User{}
+	result := db.Model(&User{}).Where("name = ?", userName).First(user)
+
+	return user, result.Error
+}
+
+func GetUsersByIds(ids []int64) []User {
+	var users []User
+	db.Find(&users, ids)
+
+	return users
 }
