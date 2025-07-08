@@ -2,7 +2,6 @@ package raffleLogic
 
 import (
 	"database/sql/driver"
-	"fmt"
 	"telebot/database"
 	"telebot/model"
 	"testing"
@@ -14,16 +13,34 @@ func TestPhraze(t *testing.T) {
 	db, mock := database.ConnectToMockDB()
 	model.Init(db)
 
-	kek := GetRandomPhrazeByKey(AcceptPrizeKey)
-
-	fmt.Println(kek)
-
-	rows := sqlmock.NewRows([]string{"key", "value"}).AddRows([]driver.Value{"kek", "pek"}, []driver.Value{"kek", "shmek"})
+	rows := sqlmock.NewRows([]string{"rey", "value"}).AddRows([]driver.Value{AcceptPrizeKey, "phraze1"}, []driver.Value{AcceptPrizeKey, "phraze2"})
 	mock.ExpectQuery("^SELECT \\* FROM \"phrazes\" WHERE key = \\$1").WillReturnRows(rows)
 
-	var result []model.Phraze
+	if randomPhraze := GetRandomPhrazeByKey(AcceptPrizeKey); randomPhraze != "phraze1" && randomPhraze != "phraze2" {
+		t.Errorf("want %s or %s, got %s", "phraze1", "phraze2", randomPhraze)
+	}
+}
 
-	if err := db.Model(&model.Phraze{}).Where("key = ?", "penis").Find(&result).Error; err != nil {
-		t.Errorf("Penis error")
+func TestGetPrizeName(t *testing.T) {
+	prize := model.Prize{
+		Name: "Prize name",
+	}
+
+	prizeName := GetPrizeName(&prize)
+
+	if prizeName != "Prize name" {
+		t.Errorf("want %s, got %s", "Prize name", prizeName)
+	}
+}
+
+func TestGetDefaultPrizeName(t *testing.T) {
+	prize := model.Prize{
+		Name: "",
+	}
+
+	prizeName := GetPrizeName(&prize)
+
+	if prizeName != defaultPrizeName {
+		t.Errorf("want %s, got %s", defaultPrizeName, prizeName)
 	}
 }
