@@ -1,10 +1,6 @@
 package model
 
-import (
-	"telebot/database"
-
-	"gorm.io/gorm/clause"
-)
+import "gorm.io/gorm/clause"
 
 /**
  * Definitely not the best way to design this bit.
@@ -20,9 +16,9 @@ const (
 )
 
 const (
-	SuperAdminRoleID int64 = 1
+	SuperAdminRoleID   int64 = 1
 	PrizeCreatorRoleID int64 = 2
-	PlayerRoleID int64 = 3
+	PlayerRoleID       int64 = 3
 )
 
 type Role struct {
@@ -32,7 +28,7 @@ type Role struct {
 }
 
 func (role *Role) Save() (*Role, error) {
-	err := database.Database.Save(&role).Error
+	err := db.Save(&role).Error
 	if err != nil {
 		return &Role{}, err
 	}
@@ -49,8 +45,9 @@ func PopulateRoles() error {
 		Columns:   []clause.Column{{Name: "id"}},
 		DoNothing: true,
 	}
+	
 	for _, role := range roles {
-		result := database.Database.Clauses(conflictClause).Create(&role)
+		result := db.Clauses(conflictClause).Create(&role)
 		if result.Error != nil {
 			return result.Error
 		}
