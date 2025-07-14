@@ -19,6 +19,9 @@ jobs:
       - name: Build
         run: go build -v
 
+      - name: Test
+        run: go test ./...
+
       - name: Copy single file to remote
         uses: appleboy/scp-action@v0.1.7
         with:
