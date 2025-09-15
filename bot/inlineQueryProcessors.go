@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/go-telegram/bot"
@@ -34,7 +33,7 @@ func processInlineQuery(ctx context.Context, b *bot.Bot, update *models.Update) 
 				ID:                  "draw",
 				Title:               "Что рисуем?",
 				Description:         description,
-				InputMessageContent: models.InputTextMessageContent{MessageText: fmt.Sprintf("Нарисовать\n%s", description)},
+				InputMessageContent: models.InputTextMessageContent{MessageText: description},
 				ReplyMarkup:         models.InlineKeyboardMarkup{InlineKeyboard: kbd},
 			},
 		},

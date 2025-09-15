@@ -10,10 +10,10 @@ import (
 )
 
 func translatePrompt(text string) (string, error) {
-	requestText := fmt.Sprintf(`{"model":"goekdenizguelmez/josiefied-qwen2.5-7b-abliterated-v2","messages":[{"role":"system","content":"Если эта фраза на русском, переведи её на английский. В противном случае оставь как есть. Формат вывода только результат."},{"role":"user","content":"%s"}], "stream":false}`, text)
+	requestText := fmt.Sprintf(`{"messages":[{"role":"system","content":"Если эта фраза на русском, переведи её на английский. В противном случае оставь как есть. Формат вывода только результат."},{"role":"user","content":"%s"}], "stream":false}`, text)
 	requestBody := []byte(requestText)
 
-	res, err := http.Post(fmt.Sprintf("%s/api/chat", os.Getenv("AI_LLM_URL")), "application/json", bytes.NewReader(requestBody))
+	res, err := http.Post(fmt.Sprintf("%s/v1/chat/completions", os.Getenv("AI_LLM_URL")), "application/json", bytes.NewReader(requestBody))
 	if err != nil {
 		return "", err
 	}
@@ -27,5 +27,5 @@ func translatePrompt(text string) (string, error) {
 		return "", err
 	}
 
-	return jsonRes["message"].(map[string]any)["content"].(string), err
+	return jsonRes["choices"].([]any)[0].(map[string]any)["message"].(map[string]any)["content"].(string), err
 }
