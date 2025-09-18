@@ -96,7 +96,7 @@ func processParticipation(update *models.Update) {
 	participants.Save()
 }
 
-func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update) {
+func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
 	chatId := update.Message.Chat.ID
 
 	processImgGenerationError := func() {
@@ -104,6 +104,10 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		_, botError := b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatId,
 			Text:   "Отмена, сервер подох",
+			ReplyParameters: &models.ReplyParameters{
+				MessageID: mainMessageId,
+				ChatID: chatId,
+			},
 		})
 		utils.ProcessSendMessageError(botError, chatId)
 	}
@@ -133,16 +137,26 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
 	from := update.Message.From
+	var fromName string
 	if from.Username != "" {
+		fromName = fmt.Sprintf("@%s", from.Username)
+		} else {
 		photo.ParseMode = "HTML"
-		photo.Caption = fmt.Sprintf("@%s", from.Username)
-	} else {
-		photo.Caption = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
+		fromName = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
 	}
+	photo.Caption = fmt.Sprintf("%s\n\n%s", fromName, update.Message.Text)
+
+	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+		ChatID:    chatId,
+		MessageID: mainMessageId,
+	})
 
 	_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
 		ChatID: chatId,
 		Media:  []models.InputMedia{photo},
+		ReplyParameters: &models.ReplyParameters{
+			MessageID: update.Message.ID,
+		},
 	})
 
 	if err != nil {

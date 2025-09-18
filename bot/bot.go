@@ -21,7 +21,12 @@ var queries = safeQueryMap{
 	value: make(map[string]callbackQueryData),
 }
 
-func getHandler(c chan *models.Update) bot.HandlerFunc {
+type imageGenerationProcessorChanel struct {
+	update        *models.Update
+	mainMessageId int
+}
+
+func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 		sendWaitInlineQueryMessage := func(msgId string) error {
@@ -32,36 +37,45 @@ func getHandler(c chan *models.Update) bot.HandlerFunc {
 			return err
 		}
 
-		sendWaitMessage := func(chatId int64) {
-			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: chatId,
-				Text:   "Ладно",
+		sendWaitMessage := func(chatId int64, replyToMessageId int) int {
+			msg, err := b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID:          chatId,
+				Text:            "Ладно",
+				ReplyParameters: &models.ReplyParameters{MessageID: replyToMessageId, ChatID: chatId},
 			})
 			utils.ProcessSendMessageError(err, chatId)
 
 			time.Sleep(2 * time.Second)
 
-			_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+			_, err = b.EditMessageText(ctx, &bot.EditMessageTextParams{
+				MessageID: msg.ID,
 				ChatID: chatId,
-				Text:   "Жди теперь",
+				Text:      "Жди теперь",
 			})
 			utils.ProcessSendMessageError(err, chatId)
+
+			return msg.ID
 		}
 
 		if update.InlineQuery != nil {
 			processInlineQuery(ctx, b, update)
 		} else if update.CallbackQuery != nil {
 			log.Println("Image generation requested by", update.CallbackQuery.From.Username)
-			go sendWaitInlineQueryMessage(update.CallbackQuery.InlineMessageID)
-			c <- update
+			sendWaitInlineQueryMessage(update.CallbackQuery.InlineMessageID)
+			c <- &imageGenerationProcessorChanel{
+				update: update,
+			}
 		} else if update.Message != nil {
 			log.Println("Received message from", update.Message.From.Username)
 
 			msgTextLower := strings.ToLower(update.Message.Text)
 			if strings.HasPrefix(msgTextLower, "нарисуй ") || strings.HasPrefix(msgTextLower, "draw ") {
 				log.Println("Image generation requested by", update.Message.From.Username)
-				go sendWaitMessage(update.Message.Chat.ID)
-				c <- update
+				mainMessageId := sendWaitMessage(update.Message.Chat.ID, update.Message.ID)
+				c <- &imageGenerationProcessorChanel{
+					update:        update,
+					mainMessageId: mainMessageId,
+				}
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", update.Message.From.Username)
 				processAIHelp(ctx, b, update)
@@ -103,12 +117,13 @@ func getHandler(c chan *models.Update) bot.HandlerFunc {
 	}
 }
 
-func processAiQueue(c chan *models.Update, ctx context.Context, b *bot.Bot) {
+func processAiQueue(c chan *imageGenerationProcessorChanel, ctx context.Context, b *bot.Bot) {
 	for {
-		update := <-c
+		dataFromChannel := <-c
+		update := dataFromChannel.update
 		fmt.Println("new request")
 		if update.Message != nil {
-			processImageGeneration(ctx, b, update)
+			processImageGeneration(ctx, b, update, dataFromChannel.mainMessageId)
 		} else if update.CallbackQuery != nil {
 			processCallbackQuery(ctx, b, update)
 		}
@@ -119,7 +134,7 @@ func Listen() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	c := make(chan *models.Update)
+	c := make(chan *imageGenerationProcessorChanel)
 
 	opts := []bot.Option{
 		bot.WithDefaultHandler(getHandler(c)),

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -79,7 +78,7 @@ func processCallbackQuery(ctx context.Context, b *bot.Bot, update *models.Update
 	photo := &models.InputMediaPhoto{
 		Media:      res.Photo[0].FileID,
 		HasSpoiler: true,
-		Caption:    fmt.Sprintf("Нарисовать %s", queryData.query),
+		Caption:    queryData.query,
 	}
 
 	_, err = b.EditMessageMedia(ctx, &bot.EditMessageMediaParams{
