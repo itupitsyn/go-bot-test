@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"strings"
 	"telebot/aiApi"
 	"telebot/model"
@@ -101,50 +99,48 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	processImgGenerationError := func() {
 		chatId := update.Message.Chat.ID
-		_, botError := b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatId,
-			Text:   "Отмена, сервер подох",
-			ReplyParameters: &models.ReplyParameters{
-				MessageID: mainMessageId,
-				ChatID: chatId,
-			},
+		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatId,
+			Text:      "Отмена, сервер подох",
+			MessageID: mainMessageId,
 		})
 		utils.ProcessSendMessageError(botError, chatId)
 	}
 
-	url, err := aiApi.GetImage(update.Message.Text)
+	imageBytes, err := aiApi.GetImage(update.Message.Text)
 	if err != nil {
+		log.Println(err)
 		log.Println("[error] error generating image")
 		processImgGenerationError()
 		return
 	}
 
-	response, err := http.Get(url)
-	if err != nil {
-		log.Println("[error] error getting generated image")
-		processImgGenerationError()
-		return
-	}
+	// response, err := http.Get(url)
+	// if err != nil {
+	// 	log.Println("[error] error getting generated image")
+	// 	processImgGenerationError()
+	// 	return
+	// }
 
-	defer response.Body.Close()
+	// defer response.Body.Close()
 
-	imageBytes, e := io.ReadAll(response.Body)
-	if e != nil {
-		log.Println("[error] error reading generated image")
-		processImgGenerationError()
-		return
-	}
+	// imageBytes, e := io.ReadAll(response.Body)
+	// if e != nil {
+	// 	log.Println("[error] error reading generated image")
+	// 	processImgGenerationError()
+	// 	return
+	// }
 
 	photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
 	from := update.Message.From
 	var fromName string
 	if from.Username != "" {
 		fromName = fmt.Sprintf("@%s", from.Username)
-		} else {
+	} else {
 		photo.ParseMode = "HTML"
 		fromName = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
 	}
-	photo.Caption = fmt.Sprintf("%s\n\n%s", fromName, update.Message.Text)
+	photo.Caption = fmt.Sprintf("%s\n%s", fromName, update.Message.Text)
 
 	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
 		ChatID:    chatId,

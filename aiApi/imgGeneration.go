@@ -1,32 +1,16 @@
 package aiApi
 
 import (
-	"errors"
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
-	"net/url"
+	"net/http"
 	"os"
 	"strings"
-
-	"math/rand"
-
-	"github.com/gorilla/websocket"
 )
-
-type msgResponse struct {
-	Msg string `json:"msg"`
-}
-
-type msgImageGeneratedRespons struct {
-	Msg    string `json:"msg"`
-	Output struct {
-		Data []struct {
-			Value []struct {
-				Name string `json:"name,omitempty"`
-			} `json:"value"`
-		} `json:"data"`
-	} `json:"output"`
-}
 
 var animeSuffix = " anime"
 var animeSuffixRu = " аниме"
@@ -37,24 +21,12 @@ var cyberpunkSuffixRu = " киберпанк"
 var mehaSuffix = " meha"
 var mehaSuffixRu = " меха"
 
-func getWSConnection() (*websocket.Conn, error) {
-	u := url.URL{Scheme: "wss", Host: os.Getenv("AI_PAINTER_HOST"), Path: "/queue/join"}
-	log.Printf("connecting to %s", u.String())
-
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return c, nil
-}
-
 func getImageTemplate(msgText string) string {
-	animeMeassageTemplate := "{\"data\":[null,false,\"%s\",\"\",[\"MRE Anime\"],\"Speed\",\"1152×896 <span style=\\\"color: grey;\\\"> ∣ 9:7</span>\",1,\"png\",\"%s\",false,2,4,\"juggernautXL_v8Rundiffusion.safetensors\",\"None\",0.5,true,\"sd_xl_offset_example-lora_1.0.safetensors\",0.1,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,false,\"uov\",\"Disabled\",null,[],null,\"\",null,false,false,false,false,1.5,0.8,0.3,7,2,\"dpmpp_2m_sde_gpu\",\"karras\",\"Default (model)\",-1,-1,-1,-1,-1,-1,false,false,false,false,64,128,\"joint\",0.25,false,1.01,1.02,0.99,0.95,false,false,\"v2.6\",1,0.618,false,false,0,false,false,\"fooocus\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",false,0,false,null,false,\"Disabled\",\"Before First Enhancement\",\"Original Prompts\",false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false],\"event_data\":null,\"fn_index\":67,\"session_hash\":\"%s\"}"
-	realisticMessageTemplate := "{\"data\":[null,false,\"%s\",\"unrealistic, saturated, high contrast, big nose, painting, drawing, sketch, cartoon, anime, manga, render, CG, 3d, watermark, signature, label\",[\"Fooocus V2\",\"Fooocus Photograph\",\"Fooocus Negative\"],\"Speed\",\"896×1152 <span style=\\\"color: grey;\\\"> ∣ 7:9</span>\",1,\"png\",\"%s\",false,2,3,\"realisticStockPhoto_v20.safetensors\",\"None\",0.5,true,\"SDXL_FILM_PHOTOGRAPHY_STYLE_V1.safetensors\",0.25,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,false,\"uov\",\"Disabled\",null,[],null,\"\",null,false,false,false,false,1.5,0.8,0.3,7,2,\"dpmpp_2m_sde_gpu\",\"karras\",\"Default (model)\",-1,-1,-1,-1,-1,-1,false,false,false,false,64,128,\"joint\",0.25,false,1.01,1.02,0.99,0.95,false,false,\"v2.6\",1,0.618,false,false,0,false,false,\"fooocus\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",false,0,false,null,false,\"Disabled\",\"Before First Enhancement\",\"Original Prompts\",false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false],\"event_data\":null,\"fn_index\":67,\"session_hash\":\"%s\"}"
-	cyberpunkMessageTemplate := "{\"data\":[null,false,\"%s\",\"\",[\"Game Cyberpunk Game\"],\"Speed\",\"1152×896 <span style=\\\"color: grey;\\\"> ∣ 9:7</span>\",1,\"png\",\"%s\",false,2,4,\"juggernautXL_v8Rundiffusion.safetensors\",\"None\",0.5,true,\"sd_xl_offset_example-lora_1.0.safetensors\",0.1,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,false,\"uov\",\"Disabled\",null,[],null,\"\",null,false,false,false,false,1.5,0.8,0.3,7,2,\"dpmpp_2m_sde_gpu\",\"karras\",\"Default (model)\",-1,-1,-1,-1,-1,-1,false,false,false,false,64,128,\"joint\",0.25,false,1.01,1.02,0.99,0.95,false,false,\"v2.6\",1,0.618,false,false,0,false,false,\"fooocus\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",false,0,false,null,false,\"Disabled\",\"Before First Enhancement\",\"Original Prompts\",false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false],\"event_data\":null,\"fn_index\":67,\"session_hash\":\"%s\"}"
-	initialMessageTemplate := "{\"data\":[null,false,\"%s\",\"\",[\"Fooocus V2\",\"Fooocus Enhance\",\"Fooocus Sharp\"],\"Speed\",\"1152×896 <span style=\\\"color: grey;\\\"> ∣ 9:7</span>\",1,\"png\",\"%s\",false,2,4,\"juggernautXL_v8Rundiffusion.safetensors\",\"None\",0.5,true,\"sd_xl_offset_example-lora_1.0.safetensors\",0.1,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,false,\"uov\",\"Disabled\",null,[],null,\"\",null,false,false,false,false,1.5,0.8,0.3,7,2,\"dpmpp_2m_sde_gpu\",\"karras\",\"Default (model)\",-1,-1,-1,-1,-1,-1,false,false,false,false,64,128,\"joint\",0.25,false,1.01,1.02,0.99,0.95,false,false,\"v2.6\",1,0.618,false,false,0,false,false,\"fooocus\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",false,0,false,null,false,\"Disabled\",\"Before First Enhancement\",\"Original Prompts\",false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false],\"event_data\":null,\"fn_index\":67,\"session_hash\":\"%s\"}"
-	mehaMessageTemplate := "{\"data\":[null,false,\"%s\",\"\",[\"Futuristic Biomechanical Cyberpunk\"],\"Speed\",\"1152×896 <span style=\\\"color: grey;\\\"> ∣ 9:7</span>\",1,\"png\",\"%s\",false,2,4,\"juggernautXL_v8Rundiffusion.safetensors\",\"None\",0.5,true,\"sd_xl_offset_example-lora_1.0.safetensors\",0.1,true,\"None\",1,true,\"None\",1,true,\"None\",1,true,\"None\",1,false,\"uov\",\"Disabled\",null,[],null,\"\",null,false,false,false,false,1.5,0.8,0.3,7,2,\"dpmpp_2m_sde_gpu\",\"karras\",\"Default (model)\",-1,-1,-1,-1,-1,-1,false,false,false,false,64,128,\"joint\",0.25,false,1.01,1.02,0.99,0.95,false,false,\"v2.6\",1,0.618,false,false,0,false,false,\"fooocus\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",null,0.5,0.6,\"ImagePrompt\",false,0,false,null,false,\"Disabled\",\"Before First Enhancement\",\"Original Prompts\",false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false,false,\"\",\"\",\"\",\"sam\",\"full\",\"vit_b\",0.25,0.3,0,false,\"v2.6\",1,0.618,0,false],\"event_data\":null,\"fn_index\":67,\"session_hash\":\"%s\"}"
+	animeMeassageTemplate := "%s . anime style, key visual, vibrant, studio anime, highly detailed"
+	realisticMessageTemplate := "%s, RAW candid cinema, 16mm, color graded portra 400 film, remarkable color, ultra realistic, textured skin, remarkable detailed pupils, realistic dull skin noise, visible skin detail, skin fuzz, dry skin, shot with cinematic camera"
+	cyberpunkMessageTemplate := "%s . neon, dystopian, futuristic, digital, vibrant, detailed, high contrast, reminiscent of cyberpunk genre video games"
+	initialMessageTemplate := "%s"
+	mehaMessageTemplate := "%s . it should look like it does in a real ife . blend of organic and mechanical elements, futuristic, cybernetic, detailed, intricate"
 
 	text := strings.ToLower(msgText)
 
@@ -97,128 +69,54 @@ func getImagePrompt(msgText string) string {
 	return text
 }
 
-func initiateImageGeneration(hash string, messageText string) (bool, error) {
-	c, err := getWSConnection()
+func generateImage(msgText string) ([]byte, error) {
+	prompt := getImagePrompt(msgText)
+	log.Printf("got prompt %s\n", prompt)
+	promptTemplate := getImageTemplate(msgText)
+	translatedPrompt, err := translatePrompt(prompt)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	data := &msgResponse{}
-	_ = c.ReadJSON(data)
+	log.Printf("translated prompt %s\n", translatedPrompt)
 
-	defer c.Close()
+	enhancedPrompt := fmt.Sprintf(promptTemplate, translatedPrompt)
 
-	if data.Msg != "send_hash" {
-		errorText := fmt.Sprintf("[error] error parsing data from server (%s)", "send_hash")
-		return false, errors.New(errorText)
-	}
+	var jsonStr = []byte(`{"sd_model_checkpoint": "flux1DevNSFWUNLOCKEDFp8_v20FP8.safetensors","CLIP_stop_at_last_layers": 2}`)
 
-	wsText := fmt.Sprintf("{\"fn_index\":67,\"session_hash\":\"%s\"}", hash)
-	err = c.WriteMessage(websocket.TextMessage, []byte(wsText))
-	if err != nil {
-		return false, errors.Join(err, errors.New("[error] error sending hash"))
-	}
-
-	_ = c.ReadJSON(data) // estimation
-	if data.Msg != "estimation" {
-		return false, fmt.Errorf("[error] error parsing data from server (%s)", "estimation")
-	}
-
-	_ = c.ReadJSON(data) // send_data
-	if data.Msg != "send_data" {
-		return false, fmt.Errorf("[error] error parsing data from server (%s)", "send_data")
-	}
-
-	randomPart := ""
-	for i := 0; i < 20; i++ {
-		randomPart += fmt.Sprintf("%d", rand.Int31n(10))
-	}
-
-	prompt := getImagePrompt(messageText)
-	messageTemplate := getImageTemplate(messageText)
-	translatedText, err := translatePrompt(prompt)
+	url := fmt.Sprintf("%s/sdapi/v1/options", os.Getenv("AI_PAINTER_HOST"))
+	_, err = http.Post(url, "application/json", bytes.NewReader(jsonStr))
 
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	messageText = fmt.Sprintf(messageTemplate, strings.ReplaceAll(translatedText, "\"", "\\\""), randomPart, hash)
-	err = c.WriteMessage(websocket.TextMessage, []byte(messageText))
-	defer c.Close()
+	str := fmt.Sprintf(`{"prompt": "%s","batch_size": 1,"steps": 20,"seed": -1,"distilled_cfg_scale": 3.5,"cfg_scale": 1,"width": 1152,"height": 896,"sampler_name": "Euler","scheduler": "Simple"}`, enhancedPrompt)
+	jsonStr = []byte(str)
 
+	url = fmt.Sprintf("%s/sdapi/v1/txt2img", os.Getenv("AI_PAINTER_HOST"))
+	res, err := http.Post(url, "application/json", bytes.NewReader(jsonStr))
 	if err != nil {
-		return false, errors.Join(err, errors.New("[error] error sending prompt"))
+		return nil, err
 	}
+	defer res.Body.Close()
 
-	_ = c.ReadJSON(data) // process_starts
-	if data.Msg != "process_starts" {
-		errText := fmt.Sprintf("[error] error parsing data from server (%s)", "process_starts")
-		return false, errors.New(errText)
-	}
+	resBody, _ := io.ReadAll(res.Body)
 
-	_ = c.ReadJSON(data) // process_completed
-	if data.Msg != "process_completed" {
-		return false, fmt.Errorf("[error] error parsing data from server (%s)", "process_completed")
-	}
-
-	return true, nil
-}
-
-func processGenerationResult(hash string) (string, error) {
-	c, err := getWSConnection()
-
+	resBytes := []byte(resBody)              // Converting the string "res" into byte array
+	var jsonRes map[string]any               // declaring a map for key names as string and values as interface
+	err = json.Unmarshal(resBytes, &jsonRes) // Unmarshalling
 	if err != nil {
-		return "", errors.Join(err, errors.New("[error] error processing image generation"))
-	}
-	defer c.Close()
-
-	data := &msgResponse{}
-	_ = c.ReadJSON(data)
-	if data.Msg != "send_hash" {
-		return "", fmt.Errorf("[error] error parsing data from server (%s)", "send_hash")
+		return nil, err
 	}
 
-	messageText := fmt.Sprintf("{\"fn_index\":68,\"session_hash\":\"%s\"}", hash)
-	err = c.WriteMessage(websocket.TextMessage, []byte(messageText))
+	base64img := jsonRes["images"].([]interface{})[0].(string)
+
+	decodedBytes, err := base64.StdEncoding.DecodeString(base64img)
 	if err != nil {
-		return "", errors.Join(err, errors.New("[error] error sending hash"))
+		return nil, err
 	}
 
-	_ = c.ReadJSON(data) // estimation
-	if data.Msg != "estimation" {
-		return "", fmt.Errorf("[error] error parsing data from server (%s)", "estimation")
-	}
+	return decodedBytes, nil
 
-	_ = c.ReadJSON(data) // send_data
-	if data.Msg != "send_data" {
-		return "", fmt.Errorf("[error] error parsing data from server (%s)", "send_data")
-	}
-
-	messageText = fmt.Sprintf("{\"data\":[null],\"event_data\":null,\"fn_index\":68,\"session_hash\":\"%s\"}", hash)
-	err = c.WriteMessage(websocket.TextMessage, []byte(messageText))
-	if err != nil {
-		return "", errors.New("[error] error sending data for getting result")
-	}
-
-	processData := &msgImageGeneratedRespons{}
-	_ = c.ReadJSON(processData) // process_starts, process_generating, process_completed
-	if processData.Msg != "process_starts" {
-		return "", fmt.Errorf("[error] error parsing data from server (%s)", "process_starts")
-	}
-
-	for processData.Msg != "process_completed" {
-		_ = c.ReadJSON(processData)
-		if processData.Msg != "process_generating" && processData.Msg != "process_completed" {
-			return "", fmt.Errorf("[error] error parsing data from server (%s)", "process_generating/process_completed")
-		}
-	}
-
-	if len(processData.Output.Data) < 4 || len(processData.Output.Data[3].Value) < 1 {
-		return "", errors.New("[error] error parsing generation result")
-	}
-
-	pathToImage := processData.Output.Data[3].Value[0].Name
-	url := fmt.Sprintf("https://%s/file=%s", os.Getenv("AI_PAINTER_HOST"), pathToImage)
-
-	return url, nil
 }

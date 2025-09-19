@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"fmt"
+	"log"
 	"strings"
 
 	"github.com/go-telegram/bot/models"
@@ -9,8 +9,8 @@ import (
 
 func ProcessSendMessageError(err error, chatId int64) {
 	if err != nil {
-		fmt.Printf("[error] couldn't send message to %d\n", chatId)
-		fmt.Println(err)
+		log.Printf("[error] couldn't send message to %d\n", chatId)
+		log.Println(err)
 	}
 }
 

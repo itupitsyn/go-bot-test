@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"telebot/model"
 
@@ -45,7 +46,7 @@ func SendResult(ctx context.Context, b *bot.Bot, chatId int64, date datatypes.Da
 func GetRandomPhrazeByKey(key string) string {
 	phrazes, err := model.GetPharzesByKey(key)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 	if phrazes != nil {
 		count := len(*phrazes)

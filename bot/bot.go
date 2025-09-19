@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -49,7 +48,7 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 
 			_, err = b.EditMessageText(ctx, &bot.EditMessageTextParams{
 				MessageID: msg.ID,
-				ChatID: chatId,
+				ChatID:    chatId,
 				Text:      "Жди теперь",
 			})
 			utils.ProcessSendMessageError(err, chatId)
@@ -121,7 +120,6 @@ func processAiQueue(c chan *imageGenerationProcessorChanel, ctx context.Context,
 	for {
 		dataFromChannel := <-c
 		update := dataFromChannel.update
-		fmt.Println("new request")
 		if update.Message != nil {
 			processImageGeneration(ctx, b, update, dataFromChannel.mainMessageId)
 		} else if update.CallbackQuery != nil {

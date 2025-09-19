@@ -26,12 +26,10 @@ func TestGetImagePrompt(t *testing.T) {
 
 func TestGetImageTemplate(t *testing.T) {
 	texts := [][]string{
-		{"нарисуй котика", "Fooocus"},
-		{"нарисуй поросёнка аниме", "Anime"},
-		{"draw meaty pork cyberpunk", "\"Game Cyberpunk Game\""},
-		{"Draw поросёнка Anime", "Anime"},
-		{"DRAW a car meha", "Futuristic Biomechanical Cyberpunk"},
-		{"", "Fooocus"},
+		{"нарисуй поросёнка аниме", "anime style"},
+		{"draw meaty pork cyberpunk", "cyberpunk genre video games"},
+		{"Draw поросёнка Anime", "anime style"},
+		{"DRAW a car meha", "organic and mechanical"},
 	}
 
 	for _, text := range texts {
@@ -40,4 +38,17 @@ func TestGetImageTemplate(t *testing.T) {
 			t.Errorf("want prompt to include %s, got %s", text[1], res)
 		}
 	}
+
+}
+
+func TestGetClearImageTemplate(t *testing.T) {
+	texts := []string{"нарисуй котика", ""}
+
+	for _, text := range texts {
+		res := getImageTemplate(text)
+		if res != "%s" {
+			t.Errorf("want prompt to be %%s, got %s", res)
+		}
+	}
+
 }
