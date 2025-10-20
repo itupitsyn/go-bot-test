@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -82,16 +83,21 @@ func generateImage(msgText string) ([]byte, error) {
 
 	enhancedPrompt := fmt.Sprintf(promptTemplate, translatedPrompt)
 
+	escapedPrompt, err := json.Marshal(enhancedPrompt)
+	if err != nil {
+		return nil, err
+	}
+	enhancedPrompt = string(escapedPrompt)
+
 	var jsonStr = []byte(`{"sd_model_checkpoint": "flux1DevNSFWUNLOCKEDFp8_v20FP8.safetensors","CLIP_stop_at_last_layers": 2}`)
 
 	url := fmt.Sprintf("%s/sdapi/v1/options", os.Getenv("AI_PAINTER_HOST"))
 	_, err = http.Post(url, "application/json", bytes.NewReader(jsonStr))
-
 	if err != nil {
 		return nil, err
 	}
 
-	str := fmt.Sprintf(`{"prompt": "%s","batch_size": 1,"steps": 20,"seed": -1,"distilled_cfg_scale": 3.5,"cfg_scale": 1,"width": 1152,"height": 896,"sampler_name": "Euler","scheduler": "Simple"}`, enhancedPrompt)
+	str := fmt.Sprintf(`{"prompt": %s,"batch_size": 1,"steps": 20,"seed": -1,"distilled_cfg_scale": 3.5,"cfg_scale": 1,"width": 1152,"height": 896,"sampler_name": "Euler","scheduler": "Simple"}`, enhancedPrompt)
 	jsonStr = []byte(str)
 
 	url = fmt.Sprintf("%s/sdapi/v1/txt2img", os.Getenv("AI_PAINTER_HOST"))
@@ -99,18 +105,31 @@ func generateImage(msgText string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer res.Body.Close()
 
-	resBody, _ := io.ReadAll(res.Body)
+	resBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
 
-	resBytes := []byte(resBody)              // Converting the string "res" into byte array
 	var jsonRes map[string]any               // declaring a map for key names as string and values as interface
 	err = json.Unmarshal(resBytes, &jsonRes) // Unmarshalling
 	if err != nil {
 		return nil, err
 	}
 
-	base64img := jsonRes["images"].([]interface{})[0].(string)
+	imgSlice, ok := jsonRes["images"].([]interface{})
+
+	if !ok {
+		return nil, errors.New("wrong responce format")
+	}
+
+	if len(imgSlice) == 0 {
+		return nil, errors.New("wrong responce format")
+	}
+
+	base64img := imgSlice[0].(string)
 
 	decodedBytes, err := base64.StdEncoding.DecodeString(base64img)
 	if err != nil {
