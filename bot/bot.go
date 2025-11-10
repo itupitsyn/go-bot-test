@@ -59,24 +59,24 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 		if update.InlineQuery != nil {
 			processInlineQuery(ctx, b, update)
 		} else if update.CallbackQuery != nil {
-			log.Println("Image generation requested by", update.CallbackQuery.From.Username)
+			log.Println("Image generation requested by", utils.GetAnyName(&update.CallbackQuery.From))
 			sendWaitInlineQueryMessage(update.CallbackQuery.InlineMessageID)
 			c <- &imageGenerationProcessorChanel{
 				update: update,
 			}
 		} else if update.Message != nil {
-			log.Println("Received message from", update.Message.From.Username)
+			log.Println("Received message from", utils.GetAnyName(update.Message.From))
 
 			msgTextLower := strings.ToLower(update.Message.Text)
 			if strings.HasPrefix(msgTextLower, "нарисуй ") || strings.HasPrefix(msgTextLower, "draw ") {
-				log.Println("Image generation requested by", update.Message.From.Username)
+				log.Println("Image generation requested by", utils.GetAnyName(update.Message.From))
 				mainMessageId := sendWaitMessage(update.Message.Chat.ID, update.Message.ID)
 				c <- &imageGenerationProcessorChanel{
 					update:        update,
 					mainMessageId: mainMessageId,
 				}
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
-				log.Println("AI help requested by", update.Message.From.Username)
+				log.Println("AI help requested by", utils.GetAnyName(update.Message.From))
 				processAIHelp(ctx, b, update)
 			}
 
@@ -91,25 +91,25 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			}
 
 			if msgTextLower == "/stats" || strings.HasPrefix(msgTextLower, "/stats@"+botName) {
-				log.Println("Stats requested by", update.Message.From.Username)
+				log.Println("Stats requested by", utils.GetAnyName(update.Message.From))
 				processStats(ctx, b, update, false)
 			} else if msgTextLower == "/stats_full" || strings.HasPrefix(msgTextLower, "/stats_full@"+botName) {
-				log.Println("Full stats requested by", update.Message.From.Username)
+				log.Println("Full stats requested by", utils.GetAnyName(update.Message.From))
 				processStats(ctx, b, update, true)
 			} else if strings.HasPrefix(msgTextLower, "сегодня ") || strings.HasPrefix(msgTextLower, "завтра ") {
-				log.Println("Prize requested by", update.Message.From.Username)
+				log.Println("Prize requested by", utils.GetAnyName(update.Message.From))
 				processPrize(ctx, b, update)
 			} else if msgTextLower == "/prize" || strings.HasPrefix(msgTextLower, "/prize@"+botName) {
-				log.Println("Prize info requested by", update.Message.From.Username)
+				log.Println("Prize info requested by", utils.GetAnyName(update.Message.From))
 				processPrizeInfo(ctx, b, update.Message.Chat.ID)
 			} else if strings.HasPrefix(msgTextLower, "/set_admin") || strings.HasPrefix(msgTextLower, "/set_admin@"+botName) {
-				log.Println("Setting admin requested by", update.Message.From.Username)
+				log.Println("Setting admin requested by", utils.GetAnyName(update.Message.From))
 				processSetAdmin(ctx, b, update)
 			} else if strings.HasPrefix(msgTextLower, "/unset_admin") || strings.HasPrefix(msgTextLower, "/unset_admin@"+botName) {
-				log.Println("Unsetting admin requested by", update.Message.From.Username)
+				log.Println("Unsetting admin requested by", utils.GetAnyName(update.Message.From))
 				processUnsetAdmin(ctx, b, update)
 			} else if strings.HasPrefix(msgTextLower, "/admins") || strings.HasPrefix(msgTextLower, "/admins@"+botName) {
-				log.Println("Admins requested by", update.Message.From.Username)
+				log.Println("Admins requested by", utils.GetAnyName(update.Message.From))
 				processAdmins(ctx, b, update)
 			}
 		}

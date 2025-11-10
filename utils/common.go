@@ -26,3 +26,11 @@ func GetAlternativeName(user *models.User) string {
 
 	return strings.Join(nameParts, "")
 }
+
+func GetAnyName(user *models.User) string {
+	if user.Username != "" {
+		return user.Username
+	}
+
+	return GetAlternativeName(user)
+}
