@@ -76,6 +76,15 @@ func processParticipation(update *models.Update) {
 	}
 	usr.Save()
 
+	chat := model.Chat{
+		ID:   update.Message.Chat.ID,
+		Name: update.Message.Chat.Title,
+	}
+	_, err := chat.Save()
+	if err != nil {
+		log.Fatal("error saving chat", err)
+	}
+
 	raffle := model.Raffle{
 		ChatID:       update.Message.Chat.ID,
 		Date:         datatypes.Date(time.Now()),
@@ -86,7 +95,6 @@ func processParticipation(update *models.Update) {
 	participants := model.Raffle{
 		ChatID: update.Message.Chat.ID,
 		Date:   datatypes.Date(time.Now()),
-		Name:   update.Message.Chat.Title,
 		Participants: []model.User{
 			usr,
 		},
@@ -114,22 +122,6 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		processImgGenerationError()
 		return
 	}
-
-	// response, err := http.Get(url)
-	// if err != nil {
-	// 	log.Println("[error] error getting generated image")
-	// 	processImgGenerationError()
-	// 	return
-	// }
-
-	// defer response.Body.Close()
-
-	// imageBytes, e := io.ReadAll(response.Body)
-	// if e != nil {
-	// 	log.Println("[error] error reading generated image")
-	// 	processImgGenerationError()
-	// 	return
-	// }
 
 	photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
 	from := update.Message.From
@@ -293,9 +285,10 @@ func setUserRoleViaCommand(ctx context.Context, b *bot.Bot, userId int64, chatId
 	if firstChatUserError != nil {
 		log.Println("No role found, creating new one", firstChatUserError)
 		chatUserRole := model.ChatUserRole{
-			ChatID: chatId,
-			UserID: userId,
-			RoleID: roleID,
+			ChatID:        chatId,
+			UserID:        userId,
+			RoleID:        roleID,
+			IsSetManually: true,
 		}
 		if _, err := chatUserRole.Save(); err != nil {
 			log.Println("[error] error creating role", err)
@@ -421,4 +414,78 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 	})
 	utils.ProcessSendMessageError(err, chatId)
+}
+
+func getUserFromChatMember(chatAdmin *models.ChatMember) *models.User {
+	var user *models.User
+	if chatAdmin.Owner != nil {
+		user = chatAdmin.Owner.User
+	} else if chatAdmin.Administrator != nil {
+		user = &chatAdmin.Administrator.User
+	}
+
+	return user
+}
+
+func syncSuperAdmins(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatId := update.Message.Chat.ID
+	chatAdmins, err := b.GetChatAdministrators(ctx, &bot.GetChatAdministratorsParams{ChatID: chatId})
+	if err != nil {
+		log.Fatal("Error getting chat admins", err)
+	}
+	userRoles, err := model.GetChatAdmins(chatId)
+	if err != nil {
+		log.Fatal("Error getting chat roles", err)
+	}
+
+	// remove old admins
+	for _, userRole := range userRoles {
+		if userRole.IsSetManually || userRole.RoleID != model.SuperAdminRoleID {
+			continue
+		}
+		isExtra := true
+		for _, chatMemeber := range chatAdmins {
+			user := getUserFromChatMember(&chatMemeber)
+			if user != nil && user.ID == userRole.UserID {
+				isExtra = false
+				break
+			}
+		}
+
+		if isExtra {
+			err := userRole.DeleteChatUserRole()
+			if err != nil {
+				log.Fatal("Error deleting roles", err)
+			} else {
+				log.Println("Superadmin is automatically removed", userRole.UserID, userRole.ChatID)
+			}
+		}
+	}
+
+	// add new admins
+	for _, chatMember := range chatAdmins {
+		user := getUserFromChatMember(&chatMember)
+		if user == nil {
+			continue
+		}
+
+		doesContain := false
+		for _, roleAdmin := range userRoles {
+			if roleAdmin.UserID == user.ID && (roleAdmin.RoleID == model.SuperAdminRoleID || roleAdmin.IsSetManually) {
+				doesContain = true
+				break
+			}
+		}
+		if doesContain {
+			continue
+		}
+
+		newAdmin := model.ChatUserRole{
+			UserID: user.ID,
+			ChatID: chatId,
+			RoleID: model.SuperAdminRoleID,
+		}
+		newAdmin.Save()
+		log.Println("Superadmin is automatically set", utils.GetAnyName(user), update.Message.Chat.Title)
+	}
 }

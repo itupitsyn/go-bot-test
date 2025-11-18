@@ -1,9 +1,10 @@
 package model
 
 type ChatUserRole struct {
-	UserID int64 `gorm:"primaryKey"`
-	ChatID int64 `gorm:"primaryKey"`
-	RoleID int64
+	UserID        int64 `gorm:"primaryKey"`
+	ChatID        int64 `gorm:"primaryKey"`
+	RoleID        int64
+	IsSetManually bool `gorm:"default:false"`
 }
 
 func (chatUserRole *ChatUserRole) Save() (*ChatUserRole, error) {
@@ -40,4 +41,9 @@ func GetChatAdmins(chatId int64) ([]ChatUserRole, error) {
 	).Order("role_id asc").Find(&chatUserRoles)
 
 	return chatUserRoles, chatUserRoleResult.Error
+}
+
+func (chatUserRole *ChatUserRole) DeleteChatUserRole() error {
+	result := db.Delete(&chatUserRole)
+	return result.Error
 }
