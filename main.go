@@ -40,22 +40,6 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.Chat{}); err != nil {
 		log.Fatal("Error migrating Chat", err)
 	}
-	if db.Migrator().HasColumn(&model.Raffle{}, "Name") {
-		var raffles []model.Raffle
-		result := db.Find(&raffles)
-
-		if result.Error != nil {
-			log.Fatal(result.Error)
-		}
-
-		for _, val := range raffles {
-			chat := model.Chat{
-				ID:   val.ChatID,
-				Name: val.Name,
-			}
-			db.Save(&chat)
-		}
-	}
 	if err := db.AutoMigrate(&model.Prize{}); err != nil {
 		log.Fatal("Error migrating Prize", err)
 	}
@@ -71,24 +55,9 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.Role{}); err != nil {
 		log.Fatal("Error migrating Role", err)
 	}
-
-	shouldMigrateRoleData := !db.Migrator().HasColumn(&model.ChatUserRole{}, "IsSetManually")
 	if err := db.AutoMigrate(&model.ChatUserRole{}); err != nil {
 		log.Fatal("Error migrating ChatUserRole", err)
 	}
-
-	if shouldMigrateRoleData {
-		var roles []model.ChatUserRole
-		result := db.Find(&roles)
-		if result.Error != nil {
-			log.Fatal(result.Error)
-		}
-		for _, val := range roles {
-			val.IsSetManually = true
-			db.Save(val)
-		}
-	}
-
 	log.Println("Successfully migrated all tables")
 
 	model.Init(db)
