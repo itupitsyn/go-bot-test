@@ -56,6 +56,7 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			return msg.ID
 		}
 
+		saveChat(update)
 		syncSuperAdmins(ctx, b, update)
 		chatId := update.Message.Chat.ID
 		if update.InlineQuery != nil {

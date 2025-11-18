@@ -76,15 +76,6 @@ func processParticipation(update *models.Update) {
 	}
 	usr.Save()
 
-	chat := model.Chat{
-		ID:   update.Message.Chat.ID,
-		Name: update.Message.Chat.Title,
-	}
-	_, err := chat.Save()
-	if err != nil {
-		log.Fatal("error saving chat", err)
-	}
-
 	raffle := model.Raffle{
 		ChatID:       update.Message.Chat.ID,
 		Date:         datatypes.Date(time.Now()),
@@ -414,6 +405,18 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 	})
 	utils.ProcessSendMessageError(err, chatId)
+}
+
+func saveChat(update *models.Update) {
+	chat := model.Chat{
+		ID:   update.Message.Chat.ID,
+		Name: update.Message.Chat.Title,
+	}
+	_, err := chat.Save()
+	if err != nil {
+		log.Fatal("error saving chat", err)
+	}
+
 }
 
 func getUserFromChatMember(chatAdmin *models.ChatMember) *models.User {
