@@ -56,8 +56,6 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			return msg.ID
 		}
 
-		saveChat(update)
-		syncSuperAdmins(ctx, b, update)
 		chatId := update.Message.Chat.ID
 		if update.InlineQuery != nil {
 			processInlineQuery(ctx, b, update)
@@ -88,6 +86,9 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			if msgType != "group" && msgType != "supergroup" {
 				return
 			}
+
+			saveChat(update)
+			syncSuperAdmins(ctx, b, update)
 
 			if !raffleLogic.IsNoReturnPoint() {
 				log.Println("Running processParticipation")
