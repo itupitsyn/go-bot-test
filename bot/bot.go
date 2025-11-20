@@ -56,16 +56,19 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			return msg.ID
 		}
 
-		chatId := update.Message.Chat.ID
 		if update.InlineQuery != nil {
+			saveUser(update.InlineQuery.From)
 			processInlineQuery(ctx, b, update)
 		} else if update.CallbackQuery != nil {
+			saveUser(&update.CallbackQuery.From)
 			log.Println("Image generation requested by", utils.GetAnyName(&update.CallbackQuery.From))
 			sendWaitInlineQueryMessage(update.CallbackQuery.InlineMessageID)
 			c <- &imageGenerationProcessorChanel{
 				update: update,
 			}
 		} else if update.Message != nil {
+			chatId := update.Message.Chat.ID
+			saveUser(update.Message.From)
 			userName := utils.GetAnyName(update.Message.From)
 			log.Println("Received message from", userName)
 

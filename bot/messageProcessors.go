@@ -74,7 +74,6 @@ func processParticipation(update *models.Update) {
 		Name:            name,
 		AlternativeName: alternativeName,
 	}
-	usr.Save()
 
 	raffle := model.Raffle{
 		ChatID:       update.Message.Chat.ID,
@@ -407,6 +406,18 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 	utils.ProcessSendMessageError(err, chatId)
 }
 
+func saveUser(from *models.User) {
+	name := from.Username
+	alternativeName := utils.GetAlternativeName(from)
+
+	usr := model.User{
+		ID:              from.ID,
+		Name:            name,
+		AlternativeName: alternativeName,
+	}
+	usr.Save()
+}
+
 func saveChat(update *models.Update) {
 	chat := model.Chat{
 		ID:   update.Message.Chat.ID,
@@ -468,7 +479,7 @@ func syncSuperAdmins(ctx context.Context, b *bot.Bot, update *models.Update) {
 	// add new admins
 	for _, chatMember := range chatAdmins {
 		user := getUserFromChatMember(&chatMember)
-		if user == nil {
+		if user == nil || user.IsBot {
 			continue
 		}
 
