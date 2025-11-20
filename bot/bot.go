@@ -83,6 +83,9 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)
 				processAIHelp(ctx, b, update)
+			} else if strings.HasPrefix(msgTextLower, "/help") || strings.HasPrefix(msgTextLower, "/help@"+botName) {
+				log.Println("Help requested by", userName)
+				processHelp(ctx, b, update)
 			}
 
 			msgType := update.Message.Chat.Type
