@@ -13,14 +13,14 @@ import (
 	"time"
 
 	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
 	"gorm.io/datatypes"
 )
 
 var ticker = time.NewTicker(60 * time.Second)
 var quit = make(chan struct{})
 
-var defaultPrizeName = "обыденное нихуя"
+var defaultPrizeNameUncensored = "обыденное нихуя"
+var defaultPrizeName = "обыденное ничего"
 
 func Listen() {
 	for {
@@ -87,31 +87,26 @@ func runRaffle(currentRaffle *model.Raffle) *model.User {
 }
 
 func sendResultWithPrep(b *bot.Bot, chatId int64, date datatypes.Date, winnerName string) {
+	chat, err := model.GetChatById(chatId)
+	if err != nil {
+		log.Fatal("error getting chat while sending result", err)
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatId,
-		Text:   "Пора!",
-	})
-	utils.ProcessSendMessageError(err, chatId)
+	phrazes := GetRandomPhrazeByKey(RaffleProvidingKey, chat.IsUncensored)
 
-	time.Sleep(2 * time.Second)
-	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: chatId,
-		Text:   "ПОРАААА!!!",
-	})
+	if len(phrazes) == 0 {
+		if chat.IsUncensored {
+			phrazes = []model.Phraze{{Value: "Пора!", IsWithSpoiler: false}, {Value: "ПОРАААА!!!", IsWithSpoiler: false}, {Value: "КРУТИМ, БЛЯДЬ!!!", IsWithSpoiler: true}}
+		} else {
+			phrazes = []model.Phraze{{Value: "Пора!", IsWithSpoiler: false}, {Value: "ПОРАААА!!!", IsWithSpoiler: false}, {Value: "КРУТИМ!!!", IsWithSpoiler: true}}
+		}
+	}
 
-	utils.ProcessSendMessageError(err, chatId)
-	time.Sleep(2 * time.Second)
-	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:    chatId,
-		Text:      "<tg-spoiler>КРУТИМ, БЛЯДЬ!!!</tg-spoiler>",
-		ParseMode: models.ParseModeHTML,
-	})
-	utils.ProcessSendMessageError(err, chatId)
+	utils.SendPhrazes(ctx, b, chat, phrazes)
 
-	time.Sleep(5 * time.Second)
-	err = SendResult(ctx, b, chatId, date, winnerName)
+	err = SendResult(ctx, b, chat, date, winnerName)
 	utils.ProcessSendMessageError(err, chatId)
 }

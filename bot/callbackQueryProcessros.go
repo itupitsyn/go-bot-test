@@ -38,25 +38,6 @@ func processCallbackQuery(ctx context.Context, b *bot.Bot, update *models.Update
 		return
 	}
 
-	// response, e := http.Get(url)
-	// if e != nil {
-	// 	defer response.Body.Close()
-	// 	log.Println("[error] error getting generated image")
-	// 	processImgGenerationError()
-	// 	return
-	// }
-
-	// defer response.Body.Close()
-
-	// imageBytes, e := io.ReadAll(response.Body)
-	// if e != nil {
-	// 	log.Println("[error] error reading generated image")
-	// 	processImgGenerationError()
-	// 	return
-	// }
-
-	// b.SendPhoto(ctx, &bot.SendPhotoParams{})
-
 	res, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
 		ChatID: os.Getenv("TMP_CHAT_ID"),
 		Photo:  &models.InputFileUpload{Filename: "photo", Data: bytes.NewReader(imageBytes)},

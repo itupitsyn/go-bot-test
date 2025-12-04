@@ -143,7 +143,7 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	utils.ProcessSendMessageError(err, chatId)
 }
 
-func processPrize(ctx context.Context, b *bot.Bot, update *models.Update) {
+func processPrize(ctx context.Context, b *bot.Bot, update *models.Update, chat *model.Chat) {
 	chatId := update.Message.Chat.ID
 	user := model.User{
 		ID: update.Message.From.ID,
@@ -155,12 +155,8 @@ func processPrize(ctx context.Context, b *bot.Bot, update *models.Update) {
 	}
 
 	if !user.CanCreatePrize(chatId) {
-		phraze := raffleLogic.GetRandomPhrazeByKey(raffleLogic.WrongAdminKey)
-		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatId,
-			Text:   phraze,
-		})
-		utils.ProcessSendMessageError(err, chatId)
+		phrazes := raffleLogic.GetRandomPhrazeByKey(raffleLogic.WrongAdminKey, chat.IsUncensored)
+		go utils.SendPhrazes(ctx, b, chat, phrazes)
 
 		return
 	}
@@ -191,30 +187,25 @@ func processPrize(ctx context.Context, b *bot.Bot, update *models.Update) {
 	}
 	prize.Save()
 
-	phraze := raffleLogic.GetRandomPhrazeByKey(raffleLogic.AcceptPrizeKey)
-
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:          chatId,
-		Text:            phraze,
-		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-	})
-	utils.ProcessSendMessageError(err, chatId)
+	phrazes := raffleLogic.GetRandomPhrazeByKey(raffleLogic.AcceptPrizeKey, chat.IsUncensored)
+	go utils.SendPhrazes(ctx, b, chat, phrazes)
 }
 
-func processPrizeInfo(ctx context.Context, b *bot.Bot, chatId int64) {
+func processPrizeInfo(ctx context.Context, b *bot.Bot, chat *model.Chat) {
+	chatId := chat.ID
 	year, month, day := time.Now().In(time.UTC).Date()
 	today := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 
 	dates := []datatypes.Date{datatypes.Date(today), datatypes.Date(today.AddDate(0, 0, 1))}
 	prizes, _ := model.GetPrizesByDate(dates, chatId)
 
-	prizeToday := raffleLogic.GetPrizeName(nil)
-	prizeTomorrow := raffleLogic.GetPrizeName(nil)
+	prizeToday := raffleLogic.GetPrizeName(nil, chat)
+	prizeTomorrow := raffleLogic.GetPrizeName(nil, chat)
 	for _, prize := range *prizes {
 		if prize.Date == dates[0] {
-			prizeToday = raffleLogic.GetPrizeName(&prize)
+			prizeToday = raffleLogic.GetPrizeName(&prize, chat)
 		} else {
-			prizeTomorrow = raffleLogic.GetPrizeName(&prize)
+			prizeTomorrow = raffleLogic.GetPrizeName(&prize, chat)
 		}
 	}
 
@@ -398,7 +389,7 @@ func processAdmins(ctx context.Context, b *bot.Bot, update *models.Update) {
 func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 	msgText := "Ты можешь отправить сообщение, например, \"Нарисуй котика\", и бот сгенерирует изображение котика. Сообщение можно отправить как в групповом чате, так и в личке! Если в конце будут слова аниме, реалистично, киберпанк или меха, то изображение будет в соответствующей стилистике.\n\nМожно писать на английском, например draw a cat meha\nВозможные варианты для английского языка: anime, realistic, cyberpunk, meha.\n\n" +
-	"У бота есть inline режим! Можно написать @pukechbot и промпт для генерации изображения. В inline режиме нет нужды добавлять его в групповой чат!"
+		"У бота есть inline режим! Можно написать @pukechbot и промпт для генерации изображения. В inline режиме нет нужды добавлять его в групповой чат!"
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chatId,
 		Text:            msgText,
@@ -410,7 +401,7 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 func processHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 	msgText := "Привет странник! У тебя есть превосходная возможность разнообразить серые будни своих групповых чатов безудержным весельем ежедневных розыгрышей!\n\nЕсли добавить этого бота в чат, то ежеденевно в 12:00 UTC он начнёт проводить розыгрыши среди активных участников чата! В конкурсе участвуют те пользователи, которые отправили хотя бы одно сообщение в течение 12 часов до розыгрыша!\n\n" +
-	"Приз можно изменить! Это может сделать суперадмин бота, либо его админ! Суперадмином устанавливаются админы чата и его владелец! Суперадмины могут управлять админами с помощью команд /set_admin, /unset_admin. Для изменения приза достаточно написать\"Сегодня развесёлое нихуя\" или \"Завтра волшебное нихуя\"! И вуаля! Приз на указанный день изменён!\n\nПоздравляю! Теперь ваш чат превратился в оплот ежедневного ураганного веселья!"
+		"Приз можно изменить! Это может сделать суперадмин бота, либо его админ! Суперадмином устанавливаются админы чата и его владелец! Суперадмины могут управлять админами с помощью команд /set_admin, /unset_admin. Для изменения приза достаточно написать\"Сегодня развесёлое нихуя\" или \"Завтра волшебное нихуя\"! И вуаля! Приз на указанный день изменён!\n\nПоздравляю! Теперь ваш чат превратился в оплот ежедневного ураганного веселья!"
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chatId,
 		Text:            msgText,
@@ -431,16 +422,31 @@ func saveUser(from *models.User) {
 	usr.Save()
 }
 
-func saveChat(update *models.Update) {
-	chat := model.Chat{
-		ID:   update.Message.Chat.ID,
-		Name: update.Message.Chat.Title,
-	}
-	_, err := chat.Save()
+func saveChat(update *models.Update) (*model.Chat, error) {
+	chatId := update.Message.Chat.ID
+
+	chat, err := model.GetChatById(chatId)
 	if err != nil {
-		log.Fatal("error saving chat", err)
+		log.Fatal("error getting chat by id ", err)
+		return nil, err
 	}
 
+	if chat != nil {
+		return chat, nil
+	}
+
+	chat = &model.Chat{
+		ID:           update.Message.Chat.ID,
+		Name:         update.Message.Chat.Title,
+		IsUncensored: false,
+	}
+	_, err = chat.Save()
+	if err != nil {
+		log.Fatal("error saving chat ", err)
+		return nil, err
+	}
+
+	return chat, nil
 }
 
 func getUserFromChatMember(chatAdmin *models.ChatMember) *models.User {

@@ -1,8 +1,16 @@
 package utils
 
 import (
+	"context"
+	"fmt"
+	"math/rand/v2"
+	"telebot/model"
+	"time"
+
 	"log"
 	"strings"
+
+	"github.com/go-telegram/bot"
 
 	"github.com/go-telegram/bot/models"
 )
@@ -33,4 +41,30 @@ func GetAnyName(user *models.User) string {
 	}
 
 	return GetAlternativeName(user)
+}
+
+func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []model.Phraze) {
+	chatId := chat.ID
+
+	for _, phraze := range phrazes {
+
+		if phraze.IsWithSpoiler {
+			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID:    chatId,
+				Text:      fmt.Sprintf("<tg-spoiler>%s</tg-spoiler>", phraze.Value),
+				ParseMode: models.ParseModeHTML,
+			})
+			ProcessSendMessageError(err, chatId)
+		} else {
+			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chat.ID,
+				Text:   phraze.Value,
+			})
+			ProcessSendMessageError(err, chatId)
+		}
+
+		duration := rand.IntN(5) + 1
+
+		time.Sleep(time.Duration(duration) * time.Second)
+	}
 }

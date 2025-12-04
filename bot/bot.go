@@ -93,7 +93,10 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 				return
 			}
 
-			saveChat(update)
+			chat, err := saveChat(update)
+			if err != nil {
+				return
+			}
 			syncSuperAdmins(ctx, b, update)
 
 			if !raffleLogic.IsNoReturnPoint() {
@@ -109,10 +112,10 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 				processStats(ctx, b, update, true)
 			} else if strings.HasPrefix(msgTextLower, "сегодня ") || strings.HasPrefix(msgTextLower, "завтра ") {
 				log.Println("Prize requested by", userName)
-				processPrize(ctx, b, update)
+				processPrize(ctx, b, update, chat)
 			} else if msgTextLower == "/prize" || strings.HasPrefix(msgTextLower, "/prize@"+botName) {
 				log.Println("Prize info requested by", userName)
-				processPrizeInfo(ctx, b, chatId)
+				processPrizeInfo(ctx, b, chat)
 			} else if strings.HasPrefix(msgTextLower, "/set_admin") || strings.HasPrefix(msgTextLower, "/set_admin@"+botName) {
 				log.Println("Setting admin requested by", userName)
 				processSetAdmin(ctx, b, update)
