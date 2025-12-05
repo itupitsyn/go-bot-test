@@ -7,7 +7,7 @@ import (
 
 type Prize struct {
 	gorm.Model
-	Name   string `gorm:"size:255;not null;" json:"name"`
+	Name   string `gorm:"not null;" json:"name"`
 	ChatID int64
 	Date   datatypes.Date
 }
