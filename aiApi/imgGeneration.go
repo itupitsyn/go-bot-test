@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 var animeSuffix = " anime"
@@ -79,28 +80,20 @@ func generateImage(msgText string) ([]byte, error) {
 		return nil, err
 	}
 
-	log.Printf("translated prompt %s\n", translatedPrompt)
-
+	
 	enhancedPrompt := fmt.Sprintf(promptTemplate, translatedPrompt)
-
 	escapedPrompt, err := json.Marshal(enhancedPrompt)
+
+	log.Printf("translated prompt %s\n", escapedPrompt)
 	if err != nil {
 		return nil, err
 	}
 	enhancedPrompt = string(escapedPrompt)
 
-	var jsonStr = []byte(`{"sd_model_checkpoint": "flux1DevNSFWUNLOCKEDFp8_v20FP8.safetensors","CLIP_stop_at_last_layers": 2}`)
+	str := fmt.Sprintf(`{"prompt": %s}`, enhancedPrompt)
+	jsonStr := []byte(str)
 
-	url := fmt.Sprintf("%s/sdapi/v1/options", os.Getenv("AI_PAINTER_HOST"))
-	_, err = http.Post(url, "application/json", bytes.NewReader(jsonStr))
-	if err != nil {
-		return nil, err
-	}
-
-	str := fmt.Sprintf(`{"prompt": %s,"batch_size": 1,"steps": 20,"seed": -1,"distilled_cfg_scale": 3.5,"cfg_scale": 1,"width": 1152,"height": 896,"sampler_name": "Euler","scheduler": "Simple"}`, enhancedPrompt)
-	jsonStr = []byte(str)
-
-	url = fmt.Sprintf("%s/sdapi/v1/txt2img", os.Getenv("AI_PAINTER_HOST"))
+	url := fmt.Sprintf("%s/api/txt2img", os.Getenv("AI_PAINTER_HOST"))
 	res, err := http.Post(url, "application/json", bytes.NewReader(jsonStr))
 	if err != nil {
 		return nil, err
@@ -119,17 +112,48 @@ func generateImage(msgText string) ([]byte, error) {
 		return nil, err
 	}
 
-	imgSlice, ok := jsonRes["images"].([]interface{})
-
+	id, ok := jsonRes["id"].(string)
 	if !ok {
-		return nil, errors.New("wrong responce format")
+		return nil, errors.New("wrong response format while getting id")
 	}
 
-	if len(imgSlice) == 0 {
-		return nil, errors.New("wrong responce format")
+	for {
+		url := fmt.Sprintf("%s/api/result", os.Getenv("AI_PAINTER_HOST"))
+		res, err := http.Get(fmt.Sprintf("%s?id=%s", url, id))
+		if err != nil {
+			return nil, err
+		}
+		defer res.Body.Close()
+
+		resBytes, err := io.ReadAll(res.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		err = json.Unmarshal(resBytes, &jsonRes) // Unmarshalling
+		if err != nil {
+			return nil, err
+		}
+
+		status, ok := jsonRes["status"].(string)
+		if !ok {
+			return nil, errors.New("wrong response format while getting generation status")
+		}
+
+		if status == "pending" || status == "in_progress" {
+			time.Sleep(5 * time.Second)
+			continue
+		} else if status == "error" {
+			return nil, errors.New("error during image generation")
+		}
+
+		break
 	}
 
-	base64img := imgSlice[0].(string)
+	base64img, ok := jsonRes["data"].(string)
+	if !ok {
+		return nil, errors.New("wrong response format while getting image data")
+	}
 
 	decodedBytes, err := base64.StdEncoding.DecodeString(base64img)
 	if err != nil {
@@ -137,5 +161,4 @@ func generateImage(msgText string) ([]byte, error) {
 	}
 
 	return decodedBytes, nil
-
 }
