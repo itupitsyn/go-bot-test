@@ -49,6 +49,47 @@ func TestPhrazes(t *testing.T) {
 	}
 }
 
+func TestUncensoredPhrazes(t *testing.T) {
+	db, mock := database.ConnectToMockDB()
+	model.Init(db)
+
+	rows := sqlmock.NewRows([]string{"key", "value", "is_uncensored", "is_with_spoiler", "group", "order"})
+	rows.AddRows([]driver.Value{AcceptPrizeKey, "phraze1", false, true, nil, nil}, []driver.Value{AcceptPrizeKey, "phraze2", true, true, nil, nil})
+	rows.AddRows([]driver.Value{AcceptPrizeKey, "phraze3", false, true, nil, nil}, []driver.Value{AcceptPrizeKey, "phraze4", true, true, nil, nil})
+	mock.ExpectQuery("^SELECT \\* FROM \"phrazes\" WHERE key = \\$1").WillReturnRows(rows)
+
+	phrazes := GetRandomPhrazeByKey(AcceptPrizeKey, true)
+
+	if len(phrazes) != 1 {
+		t.Errorf("want len %d, got %d", 1, len(phrazes))
+	}
+
+	if phrazes[0].Value != "phraze1" && phrazes[0].Value != "phraze2" && phrazes[0].Value != "phraze3" && phrazes[0].Value != "phraze4" {
+		t.Errorf("want len %s or %s, got %s", "phraze1", "phraze3", phrazes[0].Value)
+	}
+}
+
+func TestCensoredPhrazes(t *testing.T) {
+	db, mock := database.ConnectToMockDB()
+	model.Init(db)
+
+	rows := sqlmock.NewRows([]string{"key", "value", "is_uncensored", "is_with_spoiler", "group", "order"})
+	rows.AddRows([]driver.Value{AcceptPrizeKey, "phraze1", false, true, nil, nil}, []driver.Value{AcceptPrizeKey, "phraze2", true, true, nil, nil})
+	rows.AddRows([]driver.Value{AcceptPrizeKey, "phraze3", false, true, nil, nil}, []driver.Value{AcceptPrizeKey, "phraze4", true, true, nil, nil})
+	mock.ExpectQuery("^SELECT \\* FROM \"phrazes\" WHERE key = \\$1").WillReturnRows(rows)
+
+	phrazes := GetRandomPhrazeByKey(AcceptPrizeKey, true)
+
+	if len(phrazes) != 1 {
+		t.Errorf("want len %d, got %d", 1, len(phrazes))
+	}
+
+	if phrazes[0].Value != "phraze1" && phrazes[0].Value != "phraze2" && phrazes[0].Value != "phraze3" && phrazes[0].Value != "phraze4" {
+		t.Errorf("want len %s or %s, got %s", "phraze1", "phraze3", phrazes[0].Value)
+	}
+}
+
+
 func TestGetPrizeName(t *testing.T) {
 	prize := model.Prize{
 		Name: "Prize name",
