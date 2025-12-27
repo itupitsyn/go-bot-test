@@ -19,9 +19,11 @@ func (chat *Chat) Save() (*Chat, error) {
 }
 
 func GetChatById(id int64) (*Chat, error) {
-	result := &Chat{}
+	chat := &Chat{
+		ID: id,
+	}
 
-	err := db.Model(&Chat{}).Where("id = ?", id).Find(result).Error
+	err := db.First(chat).Error
 
-	return result, err
+	return chat, err
 }

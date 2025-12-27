@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	// "net/http"
 	"strings"
 	"telebot/aiApi"
 	"telebot/model"
@@ -142,6 +143,90 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 	utils.ProcessSendMessageError(err, chatId)
 }
+
+// func processI2VGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
+// 	chatId := update.Message.Chat.ID
+
+// 	processI2VGenerationError := func(text string) {
+// 		msgText := text
+
+// 		if msgText == "" {
+// 			msgText = "Отмена, сервер подох"
+// 		}
+
+// 		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+// 			ChatID:    chatId,
+// 			Text:      msgText,
+// 			MessageID: mainMessageId,
+// 		})
+// 		utils.ProcessSendMessageError(botError, chatId)
+// 	}
+
+// 	imgs := update.Message.Photo
+// 	if len(imgs) == 0 {
+// 		processI2VGenerationError("Братюнь, нужна картинка")
+// 		return
+// 	}
+
+// 	file, err := b.GetFile(ctx, &bot.GetFileParams{FileID: imgs[0].FileID})
+// 	if err != nil {
+// 		log.Fatal("Error getting image by id during I2V generation")
+// 		processI2VGenerationError("")
+// 		return
+// 	}
+
+// 	downloadURL := b.FileDownloadLink(file)
+
+// 	resp, err := http.Get(downloadURL)
+// 	if err != nil {
+// 		log.Fatal("Error downloading image by id during I2V generation")
+// 		processI2VGenerationError("")
+// 		return
+// 	}
+// 	defer resp.Body.Close()
+
+// 	var imageBytes []byte
+// 	resp.Body.Read(imageBytes)
+
+// 	log.Println(file.FilePath)
+
+// 	// videoBytes, err := aiApi.GetI2V(update.Message.Text, imageBytes, imgs[0].)
+// 	// if err != nil {
+// 	// 	log.Println(err)
+// 	// 	log.Println("[error] error generating image")
+// 	// 	processImgGenerationError()
+// 	// 	return
+// 	// }
+
+// 	// photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
+// 	// from := update.Message.From
+// 	// var fromName string
+// 	// if from.Username != "" {
+// 	// 	fromName = fmt.Sprintf("@%s", from.Username)
+// 	// } else {
+// 	// 	photo.ParseMode = "HTML"
+// 	// 	fromName = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
+// 	// }
+// 	// photo.Caption = fmt.Sprintf("%s\n%s", fromName, update.Message.Text)
+
+// 	// b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+// 	// 	ChatID:    chatId,
+// 	// 	MessageID: mainMessageId,
+// 	// })
+
+// 	// _, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
+// 	// 	ChatID: chatId,
+// 	// 	Media:  []models.InputMedia{photo},
+// 	// 	ReplyParameters: &models.ReplyParameters{
+// 	// 		MessageID: update.Message.ID,
+// 	// 	},
+// 	// })
+
+// 	// if err != nil {
+// 	// 	processImgGenerationError()
+// 	// }
+// 	// utils.ProcessSendMessageError(err, chatId)
+// }
 
 func processPrize(ctx context.Context, b *bot.Bot, update *models.Update, chat *model.Chat) {
 	chatId := update.Message.Chat.ID
@@ -426,12 +511,7 @@ func saveChat(update *models.Update) (*model.Chat, error) {
 	chatId := update.Message.Chat.ID
 
 	chat, err := model.GetChatById(chatId)
-	if err != nil {
-		log.Fatal("error getting chat by id ", err)
-		return nil, err
-	}
-
-	if chat != nil {
+	if err == nil {
 		return chat, nil
 	}
 
