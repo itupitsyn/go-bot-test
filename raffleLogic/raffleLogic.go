@@ -89,7 +89,7 @@ func runRaffle(currentRaffle *model.Raffle) *model.User {
 func sendResultWithPrep(b *bot.Bot, chatId int64, date datatypes.Date, winnerName string) {
 	chat, err := model.GetChatById(chatId)
 	if err != nil {
-		log.Fatal("error getting chat while sending result", err)
+		log.Println("error getting chat while sending result", err)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)

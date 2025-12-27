@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
-	// "net/http"
+	"net/http"
+	"path/filepath"
 	"strings"
 	"telebot/aiApi"
 	"telebot/model"
@@ -97,7 +99,6 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	chatId := update.Message.Chat.ID
 
 	processImgGenerationError := func() {
-		chatId := update.Message.Chat.ID
 		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
 			ChatID:    chatId,
 			Text:      "Отмена, сервер подох",
@@ -115,16 +116,6 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	}
 
 	photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
-	from := update.Message.From
-	var fromName string
-	if from.Username != "" {
-		fromName = fmt.Sprintf("@%s", from.Username)
-	} else {
-		photo.ParseMode = "HTML"
-		fromName = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
-	}
-	photo.Caption = fmt.Sprintf("%s\n%s", fromName, update.Message.Text)
-
 	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
 		ChatID:    chatId,
 		MessageID: mainMessageId,
@@ -144,89 +135,104 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	utils.ProcessSendMessageError(err, chatId)
 }
 
-// func processI2VGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
-// 	chatId := update.Message.Chat.ID
+func processI2VGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
+	chatId := update.Message.Chat.ID
 
-// 	processI2VGenerationError := func(text string) {
-// 		msgText := text
+	processI2VGenerationError := func(text string) {
+		msgText := text
 
-// 		if msgText == "" {
-// 			msgText = "Отмена, сервер подох"
-// 		}
+		if msgText == "" {
+			msgText = "Отмена, сервер подох"
+		}
 
-// 		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
-// 			ChatID:    chatId,
-// 			Text:      msgText,
-// 			MessageID: mainMessageId,
-// 		})
-// 		utils.ProcessSendMessageError(botError, chatId)
-// 	}
+		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatId,
+			Text:      msgText,
+			MessageID: mainMessageId,
+		})
+		utils.ProcessSendMessageError(botError, chatId)
+	}
 
-// 	imgs := update.Message.Photo
-// 	if len(imgs) == 0 {
-// 		processI2VGenerationError("Братюнь, нужна картинка")
-// 		return
-// 	}
+	imgs := update.Message.Photo
+	if len(imgs) == 0 {
+		if update.Message.ReplyToMessage != nil && len(update.Message.ReplyToMessage.Photo) > 0 {
+			imgs = update.Message.ReplyToMessage.Photo
+		} else {
+			processI2VGenerationError("Братюнь, нужна картинка")
+			return
+		}
+	}
 
-// 	file, err := b.GetFile(ctx, &bot.GetFileParams{FileID: imgs[0].FileID})
-// 	if err != nil {
-// 		log.Fatal("Error getting image by id during I2V generation")
-// 		processI2VGenerationError("")
-// 		return
-// 	}
+	maxSizeImg := imgs[0]
 
-// 	downloadURL := b.FileDownloadLink(file)
+	for _, img := range imgs {
+		if maxSizeImg.FileSize < img.FileSize {
+			maxSizeImg = img
+		}
+	}
 
-// 	resp, err := http.Get(downloadURL)
-// 	if err != nil {
-// 		log.Fatal("Error downloading image by id during I2V generation")
-// 		processI2VGenerationError("")
-// 		return
-// 	}
-// 	defer resp.Body.Close()
+	file, err := b.GetFile(ctx, &bot.GetFileParams{FileID: maxSizeImg.FileID})
+	if err != nil {
+		log.Println("Error getting image by id during I2V generation")
+		processI2VGenerationError("")
+		return
+	}
 
-// 	var imageBytes []byte
-// 	resp.Body.Read(imageBytes)
+	downloadURL := b.FileDownloadLink(file)
 
-// 	log.Println(file.FilePath)
+	resp, err := http.Get(downloadURL)
+	if err != nil {
+		log.Println("Error downloading image by id during I2V generation")
+		processI2VGenerationError("")
+		return
+	}
+	defer resp.Body.Close()
 
-// 	// videoBytes, err := aiApi.GetI2V(update.Message.Text, imageBytes, imgs[0].)
-// 	// if err != nil {
-// 	// 	log.Println(err)
-// 	// 	log.Println("[error] error generating image")
-// 	// 	processImgGenerationError()
-// 	// 	return
-// 	// }
+	imageBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Error getting image bytes during I2V generation")
+		processI2VGenerationError("")
+		return
+	}
 
-// 	// photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
-// 	// from := update.Message.From
-// 	// var fromName string
-// 	// if from.Username != "" {
-// 	// 	fromName = fmt.Sprintf("@%s", from.Username)
-// 	// } else {
-// 	// 	photo.ParseMode = "HTML"
-// 	// 	fromName = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", from.ID, utils.GetAlternativeName(from))
-// 	// }
-// 	// photo.Caption = fmt.Sprintf("%s\n%s", fromName, update.Message.Text)
+	imgName := filepath.Base(file.FilePath)
 
-// 	// b.DeleteMessage(ctx, &bot.DeleteMessageParams{
-// 	// 	ChatID:    chatId,
-// 	// 	MessageID: mainMessageId,
-// 	// })
+	msgText := update.Message.Caption
+	if msgText == "" {
+		msgText = update.Message.Text
+	}
 
-// 	// _, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
-// 	// 	ChatID: chatId,
-// 	// 	Media:  []models.InputMedia{photo},
-// 	// 	ReplyParameters: &models.ReplyParameters{
-// 	// 		MessageID: update.Message.ID,
-// 	// 	},
-// 	// })
+	prompt := utils.TrimPrefixIgnoreCase(msgText, "анимируй")
+	prompt = utils.TrimPrefixIgnoreCase(prompt, "animate")
 
-// 	// if err != nil {
-// 	// 	processImgGenerationError()
-// 	// }
-// 	// utils.ProcessSendMessageError(err, chatId)
-// }
+	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imgName)
+	if err != nil {
+		log.Println(err)
+		log.Println("Error generating i2v")
+		processI2VGenerationError("")
+		return
+	}
+
+	video := &models.InputMediaVideo{Media: "attach://image.mp4", MediaAttachment: bytes.NewReader(videoBytes), HasSpoiler: true}
+
+	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+		ChatID:    chatId,
+		MessageID: mainMessageId,
+	})
+
+	_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
+		ChatID: chatId,
+		Media:  []models.InputMedia{video},
+		ReplyParameters: &models.ReplyParameters{
+			MessageID: update.Message.ID,
+		},
+	})
+
+	if err != nil {
+		processI2VGenerationError("")
+	}
+	utils.ProcessSendMessageError(err, chatId)
+}
 
 func processPrize(ctx context.Context, b *bot.Bot, update *models.Update, chat *model.Chat) {
 	chatId := update.Message.Chat.ID
@@ -522,7 +528,7 @@ func saveChat(update *models.Update) (*model.Chat, error) {
 	}
 	_, err = chat.Save()
 	if err != nil {
-		log.Fatal("error saving chat ", err)
+		log.Println("error saving chat ", err)
 		return nil, err
 	}
 
@@ -544,11 +550,11 @@ func syncSuperAdmins(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 	chatAdmins, err := b.GetChatAdministrators(ctx, &bot.GetChatAdministratorsParams{ChatID: chatId})
 	if err != nil {
-		log.Fatal("Error getting chat admins", err)
+		log.Println("Error getting chat admins", err)
 	}
 	userRoles, err := model.GetChatAdmins(chatId)
 	if err != nil {
-		log.Fatal("Error getting chat roles", err)
+		log.Println("Error getting chat roles", err)
 	}
 
 	// remove old admins
@@ -568,7 +574,7 @@ func syncSuperAdmins(ctx context.Context, b *bot.Bot, update *models.Update) {
 		if isExtra {
 			err := userRole.DeleteChatUserRole()
 			if err != nil {
-				log.Fatal("Error deleting roles", err)
+				log.Println("Error deleting roles", err)
 			} else {
 				log.Println("Superadmin is automatically removed", userRole.UserID, userRole.ChatID)
 			}

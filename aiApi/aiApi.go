@@ -8,3 +8,8 @@ func GetImage(msgText string) ([]byte, error) {
 
 	return imageData, nil
 }
+
+func GetI2V(msgText string, imageBytes []byte, imageName string) ([]byte, error) {
+	err, video := generateI2V(msgText, imageBytes, imageName)
+	return video, err
+}

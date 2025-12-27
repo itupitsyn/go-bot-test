@@ -73,7 +73,7 @@ func uniqueInts(arr []IntWithNull) []IntWithNull {
 func GetRandomPhrazeByKey(key string, isUncensord bool) []model.Phraze {
 	phrazes, err := model.GetPharzesByKey(key, isUncensord)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	res := []model.Phraze{}

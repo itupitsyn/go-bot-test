@@ -68,3 +68,10 @@ func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []mo
 		time.Sleep(time.Duration(duration) * time.Second)
 	}
 }
+
+func TrimPrefixIgnoreCase(s, prefix string) string {
+	if len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix) {
+		return s[len(prefix):]
+	}
+	return s
+}

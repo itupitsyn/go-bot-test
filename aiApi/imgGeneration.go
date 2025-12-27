@@ -73,18 +73,17 @@ func getImagePrompt(msgText string) string {
 
 func generateImage(msgText string) ([]byte, error) {
 	prompt := getImagePrompt(msgText)
-	log.Printf("got prompt %s\n", prompt)
+	log.Printf("Got prompt %s\n", prompt)
 	promptTemplate := getImageTemplate(msgText)
 	translatedPrompt, err := translatePrompt(prompt)
 	if err != nil {
 		return nil, err
 	}
 
-	
 	enhancedPrompt := fmt.Sprintf(promptTemplate, translatedPrompt)
 	escapedPrompt, err := json.Marshal(enhancedPrompt)
 
-	log.Printf("translated prompt %s\n", escapedPrompt)
+	log.Printf("Translated prompt %s\n", escapedPrompt)
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +105,8 @@ func generateImage(msgText string) ([]byte, error) {
 		return nil, err
 	}
 
-	var jsonRes map[string]any               // declaring a map for key names as string and values as interface
-	err = json.Unmarshal(resBytes, &jsonRes) // Unmarshalling
+	var jsonRes map[string]any
+	err = json.Unmarshal(resBytes, &jsonRes)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +116,13 @@ func generateImage(msgText string) ([]byte, error) {
 		return nil, errors.New("wrong response format while getting id")
 	}
 
+	log.Println("Start waiting for image generation result")
+	i := 0
 	for {
+		if i == 200 {
+			return nil, errors.New("Waiting for image generation is too long")
+		}
+
 		url := fmt.Sprintf("%s/api/result", os.Getenv("AI_PAINTER_HOST"))
 		res, err := http.Get(fmt.Sprintf("%s?id=%s", url, id))
 		if err != nil {

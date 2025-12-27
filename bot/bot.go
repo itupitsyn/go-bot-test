@@ -73,6 +73,10 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			log.Println("Received message from", userName)
 
 			msgTextLower := strings.ToLower(update.Message.Text)
+			if msgTextLower == "" && update.Message.Photo != nil && len(update.Message.Photo) > 0 {
+				msgTextLower = strings.ToLower(update.Message.Caption)
+			}
+
 			if strings.HasPrefix(msgTextLower, "нарисуй ") || strings.HasPrefix(msgTextLower, "draw ") {
 				log.Println("Image generation requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
@@ -80,6 +84,10 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 					update:        update,
 					mainMessageId: mainMessageId,
 				}
+			} else if strings.HasPrefix(msgTextLower, "анимируй") || strings.HasPrefix(msgTextLower, "animate") {
+				log.Println("I2V generation requested by", userName)
+				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
+				processI2VGeneration(ctx, b, update, mainMessageId)
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)
 				processAIHelp(ctx, b, update)
