@@ -130,28 +130,48 @@ func waitUntilGenerationFinished(promptId string) error {
 func getGenerationResultFilename(promptId string) (error, *GenerationResult) {
 	log.Println("Get I2V generation result filename")
 
-	url := fmt.Sprintf("%s/api/history?max_items=64", os.Getenv("AI_VIDEO_HOST"))
-	resH, err := http.Get(url)
-	if err != nil {
-		return err, nil
-	}
+	var currentItem map[string]any
 
-	defer resH.Body.Close()
+	maxAttempts := 3
+	for i := 0; ; i++ {
+		url := fmt.Sprintf("%s/api/history?max_items=64", os.Getenv("AI_VIDEO_HOST"))
+		resH, err := http.Get(url)
+		if err != nil {
+			if i < maxAttempts {
+				continue
+			}
+			return err, nil
+		}
 
-	resBytes, err := io.ReadAll(resH.Body)
-	if err != nil {
-		return err, nil
-	}
+		defer resH.Body.Close()
 
-	var jsonHistoryRes map[string]any
-	err = json.Unmarshal(resBytes, &jsonHistoryRes)
-	if err != nil {
-		return err, nil
-	}
+		resBytes, err := io.ReadAll(resH.Body)
+		if err != nil {
+			if i < maxAttempts {
+				continue
+			}
+			return err, nil
+		}
 
-	currentItem, ok := jsonHistoryRes[promptId].(map[string]any)
-	if !ok {
-		return errors.New("Error getting generation result by key " + promptId), nil
+		var jsonHistoryRes map[string]any
+		err = json.Unmarshal(resBytes, &jsonHistoryRes)
+		if err != nil {
+			if i < maxAttempts {
+				continue
+			}
+			return err, nil
+		}
+
+		var ok bool
+		currentItem, ok = jsonHistoryRes[promptId].(map[string]any)
+		if !ok {
+			if i < maxAttempts {
+				continue
+			}
+			return errors.New("Error getting generation result by key " + promptId), nil
+		}
+
+		break
 	}
 
 	outputs, ok := currentItem["outputs"].(map[string]any)
@@ -162,7 +182,7 @@ func getGenerationResultFilename(promptId string) (error, *GenerationResult) {
 	var filename string
 	var subfolder string
 	isFound := false
-	for item := range maps.Values(outputs) {
+	for _, item := range outputs {
 		images, ok := item.(map[string]any)["images"].([]any)
 		if !ok || len(images) == 0 {
 			continue
