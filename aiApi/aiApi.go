@@ -13,3 +13,8 @@ func GetI2V(msgText string, imageBytes []byte, imageName string) ([]byte, error)
 	err, video := generateI2V(msgText, imageBytes, imageName)
 	return video, err
 }
+
+func GetT2V(msgText string) ([]byte, error) {
+	err, video := generateT2V(msgText)
+	return video, err
+}

@@ -135,10 +135,10 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	utils.ProcessSendMessageError(err, chatId)
 }
 
-func processI2VGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
+func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
 	chatId := update.Message.Chat.ID
 
-	processI2VGenerationError := func(text string) {
+	processVideoGenerationError := func(text string) {
 		msgText := text
 
 		if msgText == "" {
@@ -157,45 +157,47 @@ func processI2VGeneration(ctx context.Context, b *bot.Bot, update *models.Update
 	if len(imgs) == 0 {
 		if update.Message.ReplyToMessage != nil && len(update.Message.ReplyToMessage.Photo) > 0 {
 			imgs = update.Message.ReplyToMessage.Photo
-		} else {
-			processI2VGenerationError("Братюнь, нужна картинка")
+		}
+	}
+
+	var imageName string
+	var imageBytes []byte
+
+	if len(imgs) > 0 {
+		maxSizeImg := imgs[0]
+
+		for _, img := range imgs {
+			if maxSizeImg.FileSize < img.FileSize {
+				maxSizeImg = img
+			}
+		}
+
+		file, err := b.GetFile(ctx, &bot.GetFileParams{FileID: maxSizeImg.FileID})
+		if err != nil {
+			log.Println("Error getting image by id during I2V generation")
+			processVideoGenerationError("")
 			return
 		}
-	}
 
-	maxSizeImg := imgs[0]
+		downloadURL := b.FileDownloadLink(file)
 
-	for _, img := range imgs {
-		if maxSizeImg.FileSize < img.FileSize {
-			maxSizeImg = img
+		resp, err := http.Get(downloadURL)
+		if err != nil {
+			log.Println("Error downloading image by id during I2V generation")
+			processVideoGenerationError("")
+			return
 		}
+		defer resp.Body.Close()
+
+		imageBytes, err = io.ReadAll(resp.Body)
+		if err != nil {
+			log.Println("Error getting image bytes during I2V generation")
+			processVideoGenerationError("")
+			return
+		}
+
+		imageName = filepath.Base(file.FilePath)
 	}
-
-	file, err := b.GetFile(ctx, &bot.GetFileParams{FileID: maxSizeImg.FileID})
-	if err != nil {
-		log.Println("Error getting image by id during I2V generation")
-		processI2VGenerationError("")
-		return
-	}
-
-	downloadURL := b.FileDownloadLink(file)
-
-	resp, err := http.Get(downloadURL)
-	if err != nil {
-		log.Println("Error downloading image by id during I2V generation")
-		processI2VGenerationError("")
-		return
-	}
-	defer resp.Body.Close()
-
-	imageBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("Error getting image bytes during I2V generation")
-		processI2VGenerationError("")
-		return
-	}
-
-	imgName := filepath.Base(file.FilePath)
 
 	msgText := update.Message.Caption
 	if msgText == "" {
@@ -205,11 +207,19 @@ func processI2VGeneration(ctx context.Context, b *bot.Bot, update *models.Update
 	prompt := utils.TrimPrefixIgnoreCase(msgText, "анимируй")
 	prompt = utils.TrimPrefixIgnoreCase(prompt, "animate")
 
-	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imgName)
+	var videoBytes []byte
+	var err error
+
+	if imageBytes != nil {
+		videoBytes, err = aiApi.GetI2V(prompt, imageBytes, imageName)
+	} else {
+		videoBytes, err = aiApi.GetT2V(prompt)
+	}
+
 	if err != nil {
 		log.Println(err)
 		log.Println("Error generating i2v")
-		processI2VGenerationError("")
+		processVideoGenerationError("")
 		return
 	}
 
@@ -229,7 +239,7 @@ func processI2VGeneration(ctx context.Context, b *bot.Bot, update *models.Update
 	})
 
 	if err != nil {
-		processI2VGenerationError("")
+		processVideoGenerationError("")
 	}
 	utils.ProcessSendMessageError(err, chatId)
 }

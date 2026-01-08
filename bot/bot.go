@@ -87,7 +87,7 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			} else if strings.HasPrefix(msgTextLower, "анимируй") || strings.HasPrefix(msgTextLower, "animate") {
 				log.Println("I2V generation requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
-				processI2VGeneration(ctx, b, update, mainMessageId)
+				processVideoGeneration(ctx, b, update, mainMessageId)
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)
 				processAIHelp(ctx, b, update)
