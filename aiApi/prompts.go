@@ -77,7 +77,7 @@ var i2vPrompt string = `{
       "_meta": { "title": "CLIP Text Encode (Positive Prompt)" }
     },
     "94": {
-      "inputs": { "fps": 16, "images": ["87", 0] },
+      "inputs": { "fps": 24, "images": ["87", 0] },
       "class_type": "CreateVideo",
       "_meta": { "title": "Create Video" }
     },
@@ -935,7 +935,7 @@ var i2vPrompt string = `{
                 "input_ue_unconnectable": {}
               }
             },
-            "widgets_values": [16]
+            "widgets_values": [24]
           },
           {
             "id": 87,
@@ -1152,7 +1152,7 @@ var i2vPrompt string = `{
                 "input_ue_unconnectable": {}
               }
             },
-            "widgets_values": [16]
+            "widgets_values": [24]
           },
           {
             "id": 8,
@@ -1675,7 +1675,7 @@ var t2vPrompt string = `{
       "_meta": { "title": "Декодировать VAE" }
     },
     "88": {
-      "inputs": { "fps": 16, "images": ["87", 0] },
+      "inputs": { "fps": 24, "images": ["87", 0] },
       "class_type": "CreateVideo",
       "_meta": { "title": "Создать видео" }
     },
@@ -2260,7 +2260,7 @@ var t2vPrompt string = `{
               "cnr_id": "comfy-core",
               "ver": "0.3.45"
             },
-            "widgets_values": [16]
+            "widgets_values": [24]
           },
           {
             "id": 99,
@@ -2583,7 +2583,7 @@ var t2vPrompt string = `{
               "cnr_id": "comfy-core",
               "ver": "0.3.45"
             },
-            "widgets_values": [16]
+            "widgets_values": [24]
           },
           {
             "id": 89,
