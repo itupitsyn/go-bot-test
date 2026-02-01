@@ -18,13 +18,13 @@ type GenerationResult struct {
 }
 
 func waitUntilGenerationFinished(promptId string) error {
-	log.Println("Start I2V generation")
+	log.Println("Start video generation")
 	isFinished := false
 
 	i := 0
 	for !isFinished {
 		if i == 200 {
-			return errors.New("Waiting for I2V generation is too long")
+			return errors.New("Waiting for video generation is too long")
 		}
 
 		url := fmt.Sprintf("%s/api/queue", os.Getenv("AI_VIDEO_HOST"))
@@ -75,7 +75,7 @@ func waitUntilGenerationFinished(promptId string) error {
 }
 
 func getGenerationResultFilename(promptId string) (error, *GenerationResult) {
-	log.Println("Get I2V generation result filename")
+	log.Println("Get video generation result filename")
 
 	var currentItem map[string]any
 
@@ -159,7 +159,7 @@ func getGenerationResultFilename(promptId string) (error, *GenerationResult) {
 }
 
 func getGenerationResult(filename GenerationResult) (error, []byte) {
-	log.Println("Start downloading I2V generation result")
+	log.Println("Start downloading video generation result")
 
 	url := fmt.Sprintf("%s/api/view?filename=%s&subfolder=%s", os.Getenv("AI_VIDEO_HOST"), filename.filename, filename.subfolder)
 	res, err := http.Get(url)

@@ -20,12 +20,12 @@ var queries = safeQueryMap{
 	value: make(map[string]callbackQueryData),
 }
 
-type imageGenerationProcessorChanel struct {
+type aiGenerationProcessorChanel struct {
 	update        *models.Update
 	mainMessageId int
 }
 
-func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
+func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan *aiGenerationProcessorChanel) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 		sendWaitInlineQueryMessage := func(msgId string) error {
@@ -63,7 +63,7 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			saveUser(&update.CallbackQuery.From)
 			log.Println("Image generation requested by", utils.GetAnyName(&update.CallbackQuery.From))
 			sendWaitInlineQueryMessage(update.CallbackQuery.InlineMessageID)
-			c <- &imageGenerationProcessorChanel{
+			imgChannel <- &aiGenerationProcessorChanel{
 				update: update,
 			}
 		} else if update.Message != nil {
@@ -80,14 +80,17 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 			if strings.HasPrefix(msgTextLower, "нарисуй ") || strings.HasPrefix(msgTextLower, "draw ") {
 				log.Println("Image generation requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
-				c <- &imageGenerationProcessorChanel{
+				imgChannel <- &aiGenerationProcessorChanel{
 					update:        update,
 					mainMessageId: mainMessageId,
 				}
 			} else if strings.HasPrefix(msgTextLower, "анимируй") || strings.HasPrefix(msgTextLower, "animate") {
-				log.Println("I2V generation requested by", userName)
+				log.Println("Video generation requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
-				processVideoGeneration(ctx, b, update, mainMessageId)
+				videoChannel <- &aiGenerationProcessorChanel{
+					update:        update,
+					mainMessageId: mainMessageId,
+				}
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)
 				processAIHelp(ctx, b, update)
@@ -138,26 +141,15 @@ func getHandler(c chan *imageGenerationProcessorChanel) bot.HandlerFunc {
 	}
 }
 
-func processAiQueue(c chan *imageGenerationProcessorChanel, ctx context.Context, b *bot.Bot) {
-	for {
-		dataFromChannel := <-c
-		update := dataFromChannel.update
-		if update.Message != nil {
-			processImageGeneration(ctx, b, update, dataFromChannel.mainMessageId)
-		} else if update.CallbackQuery != nil {
-			processCallbackQuery(ctx, b, update)
-		}
-	}
-}
-
 func Listen() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	c := make(chan *imageGenerationProcessorChanel)
+	imgChannel := make(chan *aiGenerationProcessorChanel)
+	videoChannel := make(chan *aiGenerationProcessorChanel)
 
 	opts := []bot.Option{
-		bot.WithDefaultHandler(getHandler(c)),
+		bot.WithDefaultHandler(getHandler(imgChannel, videoChannel)),
 		bot.WithAllowedUpdates([]string{"callback_query", "message", "inline_query"}),
 	}
 
@@ -166,7 +158,8 @@ func Listen() {
 		panic(err)
 	}
 
-	go processAiQueue(c, ctx, b)
+	go processImgAiQueue(imgChannel, ctx, b)
+	go processVideoAiQueue(videoChannel, ctx, b)
 
 	self, err := b.GetMe(ctx)
 	if err != nil {
