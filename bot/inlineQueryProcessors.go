@@ -24,6 +24,8 @@ func processInlineQuery(ctx context.Context, b *bot.Bot, update *models.Update) 
 	line := []models.InlineKeyboardButton{btn}
 	kbd := [][]models.InlineKeyboardButton{line}
 
+	sizeText := buildSizeText(update.InlineQuery.From.ID)
+
 	_, err := b.AnswerInlineQuery(ctx, &bot.AnswerInlineQueryParams{
 		InlineQueryID: update.InlineQuery.ID,
 		IsPersonal:    true,
@@ -35,6 +37,12 @@ func processInlineQuery(ctx context.Context, b *bot.Bot, update *models.Update) 
 				Description:         description,
 				InputMessageContent: models.InputTextMessageContent{MessageText: description},
 				ReplyMarkup:         models.InlineKeyboardMarkup{InlineKeyboard: kbd},
+			},
+			&models.InlineQueryResultArticle{
+				ID:                  "size",
+				Title:               "Размер",
+				Description:         "Каков твой дружок",
+				InputMessageContent: models.InputTextMessageContent{MessageText: sizeText},
 			},
 		},
 	})
