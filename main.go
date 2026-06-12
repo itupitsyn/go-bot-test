@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os"
+	"os/signal"
 
 	"telebot/bot"
 	"telebot/database"
@@ -15,8 +18,13 @@ import (
 func main() {
 	loadEnv()
 	loadDatabase()
-	go raffleLogic.Listen()
-	bot.Listen()
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	b := bot.New(ctx)
+	go raffleLogic.Listen(b)
+	bot.Start(ctx, b)
 }
 
 func loadEnv() {

@@ -22,12 +22,12 @@ var quit = make(chan struct{})
 var defaultPrizeNameUncensored = "обыденное нихуя"
 var defaultPrizeName = "обыденное ничего"
 
-func Listen() {
+func Listen(b *bot.Bot) {
 	for {
 		select {
 		case <-ticker.C:
 			if IsNoReturnPoint() {
-				runRaffles()
+				runRaffles(b)
 			}
 		case <-quit:
 			ticker.Stop()
@@ -42,12 +42,7 @@ func IsNoReturnPoint() bool {
 	return now.Hour() >= 12
 }
 
-func runRaffles() ([]model.Raffle, error) {
-	b, err := bot.New(os.Getenv("TELEGRAM_APITOKEN"))
-	if err != nil {
-		panic(err)
-	}
-
+func runRaffles(b *bot.Bot) ([]model.Raffle, error) {
 	var raffle = model.Raffle{}
 
 	raffleDate := datatypes.Date(time.Now())

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"os"
-	"os/signal"
 	"strings"
 	"telebot/raffleLogic"
 	"telebot/utils"
@@ -141,10 +140,7 @@ func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan 
 	}
 }
 
-func Listen() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
-
+func New(ctx context.Context) *bot.Bot {
 	imgChannel := make(chan *aiGenerationProcessorChanel)
 	videoChannel := make(chan *aiGenerationProcessorChanel)
 
@@ -167,5 +163,9 @@ func Listen() {
 	}
 	botName = self.Username
 
+	return b
+}
+
+func Start(ctx context.Context, b *bot.Bot) {
 	b.Start(ctx)
 }
