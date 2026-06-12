@@ -67,6 +67,9 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.ChatUserRole{}); err != nil {
 		log.Fatal("Error migrating ChatUserRole", err)
 	}
+	if err := db.AutoMigrate(&model.Size{}); err != nil {
+		log.Fatal("Error migrating Size", err)
+	}
 	log.Println("Successfully migrated all tables")
 
 	model.Init(db)
