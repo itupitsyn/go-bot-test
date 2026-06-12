@@ -35,6 +35,13 @@ func buildSizeText(userID int64) string {
 		template = (*phrazes)[rand.IntN(len(*phrazes))].Value
 	}
 
+	return formatSizePhrase(template, size)
+}
+
+// formatSizePhrase substitutes the size into the template. If the template
+// contains the {size} placeholder it is replaced; otherwise the number is
+// appended with the "см" unit.
+func formatSizePhrase(template string, size int) string {
 	if strings.Contains(template, sizePlaceholder) {
 		return strings.ReplaceAll(template, sizePlaceholder, strconv.Itoa(size))
 	}

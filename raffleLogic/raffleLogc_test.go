@@ -49,7 +49,10 @@ func TestRunRuffle(t *testing.T) {
 		}
 	}
 
-	allowedDiff := 100
+	// Loose statistical bound: with 10000 draws over 10 buckets each bucket
+	// averages ~1000, and the max adjacent difference can exceed 100 by chance.
+	// 250 keeps the fairness check meaningful while avoiding flakiness.
+	allowedDiff := 250
 
 	if maxDiff > allowedDiff {
 		t.Errorf("max diff want less than %d got %d", allowedDiff, maxDiff)
