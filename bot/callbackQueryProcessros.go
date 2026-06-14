@@ -38,13 +38,26 @@ func processCallbackQuery(ctx context.Context, b *bot.Bot, update *models.Update
 		return
 	}
 
-	res, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
-		ChatID: os.Getenv("TMP_CHAT_ID"),
-		Photo:  &models.InputFileUpload{Filename: "photo", Data: bytes.NewReader(imageBytes)},
-	})
-	if err != nil {
+	var res *models.Message
+	maxAttempts := 3
+	for i := 0; ; i++ {
+		res, err = b.SendPhoto(ctx, &bot.SendPhotoParams{
+			ChatID: os.Getenv("TMP_CHAT_ID"),
+			Photo:  &models.InputFileUpload{Filename: "photo", Data: bytes.NewReader(imageBytes)},
+		})
+
+		if err == nil {
+			break
+		}
+
 		log.Println(err)
+
+		if i < maxAttempts {
+			continue
+		}
+
 		processImgGenerationError()
+
 		return
 	}
 
