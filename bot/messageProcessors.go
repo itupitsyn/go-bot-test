@@ -80,14 +80,14 @@ func processParticipation(update *models.Update) {
 
 	raffle := model.Raffle{
 		ChatID:       update.Message.Chat.ID,
-		Date:         datatypes.Date(time.Now()),
+		Date:         datatypes.Date(time.Now().In(time.UTC)),
 		Participants: []model.User{},
 	}
 	raffle.Save()
 
 	participants := model.Raffle{
 		ChatID: update.Message.Chat.ID,
-		Date:   datatypes.Date(time.Now()),
+		Date:   datatypes.Date(time.Now().In(time.UTC)),
 		Participants: []model.User{
 			usr,
 		},
