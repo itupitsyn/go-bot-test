@@ -25,3 +25,12 @@ func TestFormatSizePhraseNoPlaceholder(t *testing.T) {
 		t.Errorf("want %q, got %q", want, got)
 	}
 }
+
+func TestGenerateSizeWithinBounds(t *testing.T) {
+	for i := 0; i < 10000; i++ {
+		got := generateSize()
+		if got < sizeMin || got > sizeMax {
+			t.Fatalf("generateSize() = %d, want within [%d, %d]", got, sizeMin, sizeMax)
+		}
+	}
+}

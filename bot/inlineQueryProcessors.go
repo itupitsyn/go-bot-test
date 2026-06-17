@@ -25,6 +25,7 @@ func processInlineQuery(ctx context.Context, b *bot.Bot, update *models.Update) 
 	kbd := [][]models.InlineKeyboardButton{line}
 
 	sizeText := buildSizeText(update.InlineQuery.From.ID)
+	depthText := buildDepthText(update.InlineQuery.From.ID)
 
 	_, err := b.AnswerInlineQuery(ctx, &bot.AnswerInlineQueryParams{
 		InlineQueryID: update.InlineQuery.ID,
@@ -43,6 +44,12 @@ func processInlineQuery(ctx context.Context, b *bot.Bot, update *models.Update) 
 				Title:               "Размер",
 				Description:         "Каков твой дружок",
 				InputMessageContent: models.InputTextMessageContent{MessageText: sizeText},
+			},
+			&models.InlineQueryResultArticle{
+				ID:                  "depth",
+				Title:               "Глубина Матильды",
+				Description:         "Состояние подруженьки",
+				InputMessageContent: models.InputTextMessageContent{MessageText: depthText},
 			},
 		},
 	})

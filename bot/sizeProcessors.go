@@ -12,13 +12,23 @@ import (
 const sizeKey = "size"
 const sizePlaceholder = "{size}"
 
+// Size values are drawn from a normal distribution centred on sizeMean (the
+// most probable value), then clamped to [sizeMin, sizeMax].
+const (
+	sizeMean   = 20.0
+	sizeStdDev = 10.0
+	sizeMin    = 1
+	sizeMax    = 40
+)
+
 // buildSizeText generates and returns the phrase to post for the user's daily
-// size. The size is generated once per day (1..50) and stored, so repeated
-// requests within the day yield the same number. The phrase template is taken
-// from the DB by sizeKey and must contain the {size} placeholder; otherwise the
-// number is appended.
+// size. The size is generated once per day (normal distribution around
+// sizeMean, clamped to [sizeMin, sizeMax]) and stored, so repeated requests
+// within the day yield the same number. The phrase template is taken from the
+// DB by sizeKey and must contain the {size} placeholder; otherwise the number
+// is appended. A random emotion emoji is appended at the end.
 func buildSizeText(userID int64) string {
-	generated := rand.IntN(50) + 1 // 1..50
+	generated := generateSize()
 
 	size, err := model.GetOrCreateTodaySize(userID, generated)
 	if err != nil {
@@ -35,7 +45,13 @@ func buildSizeText(userID int64) string {
 		template = (*phrazes)[rand.IntN(len(*phrazes))].Value
 	}
 
-	return formatSizePhrase(template, size)
+	return fmt.Sprintf("%s %s", formatSizePhrase(template, size), randomEmotionEmoji())
+}
+
+// generateSize draws a daily size from a normal distribution centred on
+// sizeMean, clamped to [sizeMin, sizeMax].
+func generateSize() int {
+	return clampedNormal(sizeMean, sizeStdDev, sizeMin, sizeMax)
 }
 
 // formatSizePhrase substitutes the size into the template. If the template

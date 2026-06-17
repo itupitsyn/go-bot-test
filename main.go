@@ -70,6 +70,9 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.Size{}); err != nil {
 		log.Fatal("Error migrating Size", err)
 	}
+	if err := db.AutoMigrate(&model.Depth{}); err != nil {
+		log.Fatal("Error migrating Depth", err)
+	}
 	log.Println("Successfully migrated all tables")
 
 	model.Init(db)

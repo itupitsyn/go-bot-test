@@ -45,7 +45,7 @@ func IsNoReturnPoint() bool {
 func runRaffles(b *bot.Bot) ([]model.Raffle, error) {
 	var raffle = model.Raffle{}
 
-	raffleDate := datatypes.Date(time.Now())
+	raffleDate := datatypes.Date(time.Now().UTC())
 	raffles, err := raffle.GetRafflesByDate(raffleDate)
 
 	for _, currentRaffle := range raffles {
