@@ -257,7 +257,7 @@ func processPrize(ctx context.Context, b *bot.Bot, update *models.Update, chat *
 
 	if !user.CanCreatePrize(chatId) {
 		phrazes := raffleLogic.GetRandomPhrazeByKey(raffleLogic.WrongAdminKey, chat.IsUncensored)
-		go utils.SendPhrazes(ctx, b, chat, phrazes)
+		go utils.SendPhrazes(ctx, b, chat, phrazes, update.Message.ID)
 
 		return
 	}
@@ -265,11 +265,17 @@ func processPrize(ctx context.Context, b *bot.Bot, update *models.Update, chat *
 	var date datatypes.Date
 	if phraseParts[0] == "сегодня" {
 		if raffleLogic.IsNoReturnPoint() {
-			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: chatId,
-				Text:   "ПОЗДНО!",
-			})
-			utils.ProcessSendMessageError(err, chatId)
+			phrazes := raffleLogic.GetRandomPhrazeByKey(raffleLogic.TooLateKey, chat.IsUncensored)
+			if len(phrazes) > 0 {
+				go utils.SendPhrazes(ctx, b, chat, phrazes, update.Message.ID)
+			} else {
+				_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID:          chatId,
+					Text:            "ПОЗДНО!",
+					ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+				})
+				utils.ProcessSendMessageError(err, chatId)
+			}
 			return
 		} else {
 			date = datatypes.Date(time.Now().In(time.UTC))
@@ -289,7 +295,7 @@ func processPrize(ctx context.Context, b *bot.Bot, update *models.Update, chat *
 	prize.Save()
 
 	phrazes := raffleLogic.GetRandomPhrazeByKey(raffleLogic.AcceptPrizeKey, chat.IsUncensored)
-	go utils.SendPhrazes(ctx, b, chat, phrazes)
+	go utils.SendPhrazes(ctx, b, chat, phrazes, update.Message.ID)
 }
 
 func processPrizeInfo(ctx context.Context, b *bot.Bot, chat *model.Chat) {

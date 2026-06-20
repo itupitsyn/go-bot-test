@@ -18,6 +18,7 @@ import (
 var AcceptPrizeKey = "accept_prize"
 var WrongAdminKey = "wrong_admin"
 var RaffleProvidingKey = "raffle_providing"
+var TooLateKey = "too_late"
 
 func GetPrizeName(prize *model.Prize, chat *model.Chat) string {
 	var prizeName string

@@ -43,22 +43,31 @@ func GetAnyName(user *models.User) string {
 	return GetAlternativeName(user)
 }
 
-func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []model.Phraze) {
+// SendPhrazes posts each phraze to the chat. If a non-zero replyTo message ID
+// is passed, every phraze is sent as a reply to that message.
+func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []model.Phraze, replyTo ...int) {
 	chatId := chat.ID
+
+	var replyParams *models.ReplyParameters
+	if len(replyTo) > 0 && replyTo[0] != 0 {
+		replyParams = &models.ReplyParameters{MessageID: replyTo[0]}
+	}
 
 	for _, phraze := range phrazes {
 
 		if phraze.IsWithSpoiler {
 			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID:    chatId,
-				Text:      fmt.Sprintf("<tg-spoiler>%s</tg-spoiler>", phraze.Value),
-				ParseMode: models.ParseModeHTML,
+				ChatID:          chatId,
+				Text:            fmt.Sprintf("<tg-spoiler>%s</tg-spoiler>", phraze.Value),
+				ParseMode:       models.ParseModeHTML,
+				ReplyParameters: replyParams,
 			})
 			ProcessSendMessageError(err, chatId)
 		} else {
 			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: chat.ID,
-				Text:   phraze.Value,
+				ChatID:          chat.ID,
+				Text:            phraze.Value,
+				ReplyParameters: replyParams,
 			})
 			ProcessSendMessageError(err, chatId)
 		}
