@@ -155,8 +155,15 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	imgs := update.Message.Photo
 	if len(imgs) == 0 {
-		if update.Message.ReplyToMessage != nil && len(update.Message.ReplyToMessage.Photo) > 0 {
-			imgs = update.Message.ReplyToMessage.Photo
+		reply := update.Message.ReplyToMessage
+		if reply != nil {
+			log.Printf("Video: reply present, reply.Photo=%d, reply.Animation=%v, reply.Video=%v, reply.Document=%v",
+				len(reply.Photo), reply.Animation != nil, reply.Video != nil, reply.Document != nil)
+			if len(reply.Photo) > 0 {
+				imgs = reply.Photo
+			}
+		} else {
+			log.Println("Video: no photo in message and no reply")
 		}
 	}
 
