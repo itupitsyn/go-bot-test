@@ -7,119 +7,18 @@ import (
 	"fmt"
 	"image"
 	_ "image/jpeg" // Register JPEG decoder
-	_ "image/png"  // Register PNG decoder	"io"
+	_ "image/png"  // Register PNG decoder
 	"io"
 	"log"
-	"math"
-	"math/rand/v2"
 	"mime/multipart"
 	"net/http"
 	"os"
-	"strings"
+	"strconv"
 )
 
 type ImgSize struct {
 	width  int
 	height int
-}
-
-func getI2VpromptId(prompt string, imageName string, imgSize ImgSize) (error, string) {
-	log.Println("Start getting prompt id")
-
-	escaped, err := json.Marshal(prompt)
-	if err != nil {
-		return err, ""
-	}
-
-	jsonStr := strings.ReplaceAll(i2vPrompt, `"PositivePrompt"`, string(escaped))
-	jsonStr = strings.ReplaceAll(jsonStr, "206275406212235", fmt.Sprint(rand.Int64N(math.MaxInt64)))
-	jsonStr = strings.ReplaceAll(jsonStr, "ImageName", imageName)
-	jsonStr = strings.ReplaceAll(jsonStr, "800", fmt.Sprint(imgSize.width))
-	jsonStr = strings.ReplaceAll(jsonStr, "496", fmt.Sprint(imgSize.height))
-	url := fmt.Sprintf("%s/api/prompt", os.Getenv("AI_VIDEO_HOST"))
-
-	resP, err := http.Post(url, "application/json", bytes.NewReader([]byte(jsonStr)))
-	if err != nil {
-		return err, ""
-	}
-
-	defer resP.Body.Close()
-
-	resBytes, err := io.ReadAll(resP.Body)
-	if err != nil {
-		return err, ""
-	}
-
-	var promptJsonRes map[string]any
-	err = json.Unmarshal(resBytes, &promptJsonRes)
-	if err != nil {
-		return err, ""
-	}
-
-	promptId, ok := promptJsonRes["prompt_id"].(string)
-	if !ok {
-		return errors.New("Error getting prompt_id"), ""
-	}
-	return nil, promptId
-}
-
-func uploadImage(imageBytes []byte, filename string) (error, string) {
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// 2. Add a text field
-	_ = writer.WriteField("type", "input")
-
-	// 3. Add a file
-	part, err := writer.CreateFormFile("image", filename)
-	if err != nil {
-		return err, ""
-	}
-	// Copy the byte array data into the form file field writer
-	_, err = io.Copy(part, bytes.NewReader(imageBytes))
-	if err != nil {
-		return err, ""
-	}
-	// 4. Important: close the writer to finalize the body
-	writer.Close()
-
-	// 5. Create the HTTP request
-	url := fmt.Sprintf("%s/api/upload/image", os.Getenv("AI_VIDEO_HOST"))
-	req, err := http.NewRequest("POST", url, body)
-	if err != nil {
-		return err, ""
-	}
-
-	// 6. Important: set the Content-Type header with the boundary
-	// The writer.Boundary() method provides the correct header value.
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	// 7. Send the request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Println(err)
-	}
-	defer resp.Body.Close()
-
-	resBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err, ""
-	}
-
-	var jsonResp map[string]any
-	err = json.Unmarshal(resBytes, &jsonResp)
-	if err != nil {
-		return err, ""
-	}
-
-	name, ok := jsonResp["name"].(string)
-
-	if !ok {
-		return errors.New("Error getting uploaded filename"), ""
-	}
-
-	return nil, name
 }
 
 func getImageSize(imageBytes []byte) (error, *ImgSize) {
@@ -155,9 +54,75 @@ func getImageSize(imageBytes []byte) (error, *ImgSize) {
 	}
 }
 
+func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSize, fps int) (error, string) {
+	log.Println("Start getting i2v id")
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	if err := writer.WriteField("prompt", prompt); err != nil {
+		return err, ""
+	}
+	if err := writer.WriteField("width", strconv.Itoa(imgSize.width)); err != nil {
+		return err, ""
+	}
+	if err := writer.WriteField("height", strconv.Itoa(imgSize.height)); err != nil {
+		return err, ""
+	}
+	if err := writer.WriteField("fps", strconv.Itoa(fps)); err != nil {
+		return err, ""
+	}
+
+	part, err := writer.CreateFormFile("file", imageName)
+	if err != nil {
+		return err, ""
+	}
+	if _, err = io.Copy(part, bytes.NewReader(imageBytes)); err != nil {
+		return err, ""
+	}
+	if err = writer.Close(); err != nil {
+		return err, ""
+	}
+
+	url := fmt.Sprintf("%s/api/i2v", os.Getenv("AI_VIDEO_HOST"))
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return err, ""
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err, ""
+	}
+
+	defer res.Body.Close()
+
+	resBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err, ""
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("i2v request failed with status %d: %s", res.StatusCode, string(resBytes)), ""
+	}
+
+	var jsonRes map[string]any
+	err = json.Unmarshal(resBytes, &jsonRes)
+	if err != nil {
+		return fmt.Errorf("i2v response is not valid json (%w): %s", err, string(resBytes)), ""
+	}
+
+	id, ok := jsonRes["id"].(string)
+	if !ok {
+		return errors.New("wrong response format while getting i2v id"), ""
+	}
+
+	return nil, id
+}
+
 func generateI2V(prompt string, imageBytes []byte, imageName string) (error, []byte) {
 	translatedPrompt, err := translatePrompt(prompt)
-
 	if err != nil {
 		return err, nil
 	}
@@ -167,27 +132,15 @@ func generateI2V(prompt string, imageBytes []byte, imageName string) (error, []b
 		return err, nil
 	}
 
-	err, uploadedImageName := uploadImage(imageBytes, imageName)
+	err, id := getI2VId(translatedPrompt, imageBytes, imageName, *imgSize, defaultVideoFps)
 	if err != nil {
 		return err, nil
 	}
 
-	err, promptId := getI2VpromptId(translatedPrompt, uploadedImageName, *imgSize)
+	video, err := waitVideoResult(id)
 	if err != nil {
 		return err, nil
 	}
-
-	err = waitUntilGenerationFinished(promptId)
-	if err != nil {
-		return err, nil
-	}
-
-	err, filename := getGenerationResultFilename(promptId)
-	if err != nil {
-		return err, nil
-	}
-
-	err, video := getGenerationResult(*filename)
 
 	return nil, video
 }
