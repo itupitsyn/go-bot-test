@@ -7,73 +7,66 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
-	"math/rand/v2"
 	"net/http"
 	"os"
-	"strings"
 )
 
-func getT2VpromptId(prompt string) (error, string) {
-	log.Println("Start getting prompt id")
+func getT2VId(prompt string, width, height, fps int) (error, string) {
+	log.Println("Start getting t2v id")
 
 	escaped, err := json.Marshal(prompt)
 	if err != nil {
 		return err, ""
 	}
 
-	jsonStr := strings.ReplaceAll(t2vPrompt, `"PositivePrompt"`, string(escaped))
-	jsonStr = strings.ReplaceAll(jsonStr, "206275406212235", fmt.Sprint(rand.Int64N(math.MaxInt64)))
-	url := fmt.Sprintf("%s/api/prompt", os.Getenv("AI_VIDEO_HOST"))
+	jsonStr := fmt.Sprintf(`{"prompt": %s, "width": %d, "height": %d, "fps": %d}`, string(escaped), width, height, fps)
+	url := fmt.Sprintf("%s/api/t2v", os.Getenv("AI_VIDEO_HOST"))
 
-	resP, err := http.Post(url, "application/json", bytes.NewReader([]byte(jsonStr)))
+	res, err := http.Post(url, "application/json", bytes.NewReader([]byte(jsonStr)))
 	if err != nil {
 		return err, ""
 	}
 
-	defer resP.Body.Close()
+	defer res.Body.Close()
 
-	resBytes, err := io.ReadAll(resP.Body)
+	resBytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		return err, ""
 	}
 
-	var promptJsonRes map[string]any
-	err = json.Unmarshal(resBytes, &promptJsonRes)
-	if err != nil {
-		return err, ""
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("t2v request failed with status %d: %s", res.StatusCode, string(resBytes)), ""
 	}
 
-	promptId, ok := promptJsonRes["prompt_id"].(string)
+	var jsonRes map[string]any
+	err = json.Unmarshal(resBytes, &jsonRes)
+	if err != nil {
+		return fmt.Errorf("t2v response is not valid json (%w): %s", err, string(resBytes)), ""
+	}
+
+	id, ok := jsonRes["id"].(string)
 	if !ok {
-		return errors.New("Error getting prompt_id"), ""
+		return errors.New("wrong response format while getting t2v id"), ""
 	}
-	return nil, promptId
+
+	return nil, id
 }
 
 func generateT2V(prompt string) (error, []byte) {
 	translatedPrompt, err := translatePrompt(prompt)
-
 	if err != nil {
 		return err, nil
 	}
 
-	err, promptId := getT2VpromptId(translatedPrompt)
+	err, id := getT2VId(translatedPrompt, defaultVideoWidth, defaultVideoHeight, defaultVideoFps)
 	if err != nil {
 		return err, nil
 	}
 
-	err = waitUntilGenerationFinished(promptId)
+	video, err := waitVideoResult(id)
 	if err != nil {
 		return err, nil
 	}
-
-	err, filename := getGenerationResultFilename(promptId)
-	if err != nil {
-		return err, nil
-	}
-
-	err, video := getGenerationResult(*filename)
 
 	return nil, video
 }
