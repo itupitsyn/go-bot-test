@@ -213,6 +213,10 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	prompt := utils.TrimPrefixIgnoreCase(msgText, "анимируй")
 	prompt = utils.TrimPrefixIgnoreCase(prompt, "animate")
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		prompt = "animate this image, natural smooth motion"
+	}
 
 	var videoBytes []byte
 	var err error
