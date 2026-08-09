@@ -15,7 +15,7 @@ import (
 const (
 	defaultVideoWidth  = 832
 	defaultVideoHeight = 480
-	defaultVideoFps    = 30
+	defaultVideoFps    = 24
 )
 
 // waitVideoResult polls the video service /api/result endpoint until the
