@@ -22,6 +22,7 @@ var queries = safeQueryMap{
 type aiGenerationProcessorChanel struct {
 	update        *models.Update
 	mainMessageId int
+	prompt        string
 }
 
 func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan *aiGenerationProcessorChanel) bot.HandlerFunc {
@@ -76,19 +77,26 @@ func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan 
 				msgTextLower = strings.ToLower(update.Message.Caption)
 			}
 
-			if strings.HasPrefix(msgTextLower, "нарисуй ") || strings.HasPrefix(msgTextLower, "draw ") {
+			imgPrompt := ""
+			if isCommand(msgTextLower, "нарисуй", "draw") {
+				imgPrompt = buildAiPrompt(update.Message, "нарисуй", "draw")
+			}
+
+			if imgPrompt != "" {
 				log.Println("Image generation requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
 				imgChannel <- &aiGenerationProcessorChanel{
 					update:        update,
 					mainMessageId: mainMessageId,
+					prompt:        imgPrompt,
 				}
-			} else if strings.HasPrefix(msgTextLower, "анимируй") || strings.HasPrefix(msgTextLower, "animate") {
+			} else if isCommand(msgTextLower, "анимируй", "animate") {
 				log.Println("Video generation requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
 				videoChannel <- &aiGenerationProcessorChanel{
 					update:        update,
 					mainMessageId: mainMessageId,
+					prompt:        buildAiPrompt(update.Message, "анимируй", "animate"),
 				}
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)

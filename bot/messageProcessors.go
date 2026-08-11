@@ -95,7 +95,7 @@ func processParticipation(update *models.Update) {
 	participants.Save()
 }
 
-func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
+func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int, prompt string) {
 	chatId := update.Message.Chat.ID
 
 	processImgGenerationError := func() {
@@ -107,7 +107,7 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		utils.ProcessSendMessageError(botError, chatId)
 	}
 
-	imageBytes, err := aiApi.GetImage(update.Message.Text)
+	imageBytes, err := aiApi.GetImage(prompt)
 	if err != nil {
 		log.Println(err)
 		log.Println("[error] error generating image")
@@ -135,7 +135,7 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	utils.ProcessSendMessageError(err, chatId)
 }
 
-func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
+func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int, prompt string) {
 	chatId := update.Message.Chat.ID
 
 	processVideoGenerationError := func(text string) {
@@ -206,14 +206,6 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		imageName = filepath.Base(file.FilePath)
 	}
 
-	msgText := update.Message.Caption
-	if msgText == "" {
-		msgText = update.Message.Text
-	}
-
-	prompt := utils.TrimPrefixIgnoreCase(msgText, "анимируй")
-	prompt = utils.TrimPrefixIgnoreCase(prompt, "animate")
-	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		prompt = "animate this image, natural smooth motion"
 	}
@@ -506,11 +498,25 @@ func processAdmins(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
-	msgText := "Ты можешь отправить сообщение, например, \"Нарисуй котика\", и бот сгенерирует изображение котика. Сообщение можно отправить как в групповом чате, так и в личке! Если в конце будут слова аниме, реалистично, киберпанк или меха, то изображение будет в соответствующей стилистике.\n\nМожно писать на английском, например draw a cat meha\nВозможные варианты для английского языка: anime, realistic, cyberpunk, meha.\n\n" +
-		"У бота есть inline режим! Можно написать @pukechbot и промпт для генерации изображения. В inline режиме нет нужды добавлять его в групповой чат!"
+	msgText := "<b>Картинки</b>\n" +
+		"Напиши «Нарисуй котика» — бот пришлёт картинку. Работает и в группе, и в личке.\n\n" +
+		"<b>Стили</b>\n" +
+		"Допиши в конце аниме, реалистично, киберпанк или меха — картинка будет в этой стилистике.\n" +
+		"Например: «Нарисуй котика киберпанк».\n\n" +
+		"<b>Видео</b>\n" +
+		"«Анимируй танцующего котика» — бот сделает видео по описанию.\n" +
+		"Если отправить картинку с подписью «Анимируй ...» или ответить «Анимируй» на сообщение с картинкой, бот оживит именно её.\n\n" +
+		"<b>Ответ на сообщение</b>\n" +
+		"Ответь на любое текстовое сообщение словом «Нарисуй» или «Анимируй» — промптом станет текст того сообщения.\n" +
+		"Всё, что допишешь после команды, добавится к промпту: ответ «Нарисуй аниме» на сообщение «котик на подоконнике» даст «котик на подоконнике аниме».\n\n" +
+		"<b>Английский</b>\n" +
+		"Всё то же самое: «draw a cat meha», «animate a dancing cat». Стили — anime, realistic, cyberpunk, meha.\n\n" +
+		"<b>Inline-режим</b>\n" +
+		fmt.Sprintf("Набери в любом чате @%s и промпт — добавлять бота в этот чат не нужно.", botName)
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chatId,
 		Text:            msgText,
+		ParseMode:       models.ParseModeHTML,
 		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 	})
 	utils.ProcessSendMessageError(err, chatId)
@@ -518,11 +524,27 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 func processHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
-	msgText := "Привет странник! У тебя есть превосходная возможность разнообразить серые будни своих групповых чатов безудержным весельем ежедневных розыгрышей!\n\nЕсли добавить этого бота в чат, то ежеденевно в 12:00 UTC он начнёт проводить розыгрыши среди активных участников чата! В конкурсе участвуют те пользователи, которые отправили хотя бы одно сообщение в течение 12 часов до розыгрыша!\n\n" +
-		"Приз можно изменить! Это может сделать суперадмин бота, либо его админ! Суперадмином устанавливаются админы чата и его владелец! Суперадмины могут управлять админами с помощью команд /set_admin, /unset_admin. Для изменения приза достаточно написать\"Сегодня развесёлое нихуя\" или \"Завтра волшебное нихуя\"! И вуаля! Приз на указанный день изменён!\n\nПоздравляю! Теперь ваш чат превратился в оплот ежедневного ураганного веселья!"
+	msgText := "Привет, странник! Я разнообразю серые будни групповых чатов ежедневными розыгрышами. Добавь меня в чат — и понеслось.\n\n" +
+		"<b>Как проходит розыгрыш</b>\n" +
+		"Каждый день в 12:00 UTC я выбираю случайного победителя. Участвуют все, кто с полуночи UTC и до розыгрыша написал в чат хотя бы одно сообщение. Если желающих меньше двух, розыгрыш не проводится — скучно.\n\n" +
+		"<b>Приз</b>\n" +
+		"По умолчанию разыгрывается обыденное ничего, но приз можно назначить свой: напиши «Сегодня развесёлое ничего» или «Завтра волшебное ничего».\n" +
+		"Приз на сегодня меняется только до 12:00 UTC, после розыгрыша поезд ушёл.\n" +
+		"/prize — что разыгрывается сегодня и завтра.\n\n" +
+		"<b>Кто может менять приз</b>\n" +
+		"Суперадмины — это владелец чата и его админы, я нахожу их сам. Ещё они могут выдать одминку кому угодно:\n" +
+		"/set_admin @user — выдать\n" +
+		"/unset_admin @user — отобрать\n" +
+		"/admins — посмотреть, кто в списке\n\n" +
+		"<b>Статистика</b>\n" +
+		"/stats — победители с начала года\n" +
+		"/stats_full — победители за всё время\n\n" +
+		"<b>Ещё я рисую и анимирую</b>\n" +
+		"/ai_help — как этим пользоваться."
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chatId,
 		Text:            msgText,
+		ParseMode:       models.ParseModeHTML,
 		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 	})
 	utils.ProcessSendMessageError(err, chatId)

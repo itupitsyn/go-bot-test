@@ -10,7 +10,7 @@ func processImgAiQueue(imgChannel chan *aiGenerationProcessorChanel, ctx context
 		dataFromChannel := <-imgChannel
 		update := dataFromChannel.update
 		if update.Message != nil {
-			processImageGeneration(ctx, b, update, dataFromChannel.mainMessageId)
+			processImageGeneration(ctx, b, update, dataFromChannel.mainMessageId, dataFromChannel.prompt)
 		} else if update.CallbackQuery != nil {
 			processCallbackQuery(ctx, b, update)
 		}
@@ -22,6 +22,6 @@ func processVideoAiQueue(videoChannel chan *aiGenerationProcessorChanel, ctx con
 		dataFromChannel := <-videoChannel
 		update := dataFromChannel.update
 		mainMessageId := dataFromChannel.mainMessageId
-		processVideoGeneration(ctx, b, update, mainMessageId)
+		processVideoGeneration(ctx, b, update, mainMessageId, dataFromChannel.prompt)
 	}
 }
