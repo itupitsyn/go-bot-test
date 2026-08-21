@@ -24,6 +24,7 @@ func main() {
 
 	b := bot.New(ctx)
 	go raffleLogic.Listen(b)
+	go bot.StartThumbnailServer(ctx, b)
 	bot.Start(ctx, b)
 }
 
@@ -73,11 +74,22 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.Depth{}); err != nil {
 		log.Fatal("Error migrating Depth", err)
 	}
+	if err := db.AutoMigrate(&model.InlineImage{}); err != nil {
+		log.Fatal("Error migrating InlineImage", err)
+	}
 	log.Println("Successfully migrated all tables")
 
 	model.Init(db)
 
 	if err := model.PopulateRoles(); err != nil {
 		log.Fatal("Error populating roles", err)
+	}
+
+	backfilled, err := model.BackfillInlineImageTokens()
+	if err != nil {
+		log.Fatal("Error backfilling inline image tokens", err)
+	}
+	if backfilled > 0 {
+		log.Printf("Gave a preview token to %d inline images\n", backfilled)
 	}
 }

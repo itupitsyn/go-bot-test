@@ -20,5 +20,8 @@ COPY --from=builder /app/main /bot
 COPY --from=builder /app/.env.local /.env.local
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
+# Previews for inline results are served from here, see THUMBNAIL_PORT
+EXPOSE 8080
+
 # Define the command to run the app when the container starts
 CMD ["/bot"]

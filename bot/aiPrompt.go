@@ -9,6 +9,10 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
+// defaultAnimationPrompt is used when a picture is handed to the animator
+// without any words of its own.
+const defaultAnimationPrompt = "animate this image, natural smooth motion"
+
 // isCommand reports whether the already lowercased text starts with one of the
 // keywords used as a standalone word: the keyword is either the whole text or
 // is followed by a space.

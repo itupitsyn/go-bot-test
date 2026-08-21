@@ -21,7 +21,10 @@ func processVideoAiQueue(videoChannel chan *aiGenerationProcessorChanel, ctx con
 	for {
 		dataFromChannel := <-videoChannel
 		update := dataFromChannel.update
-		mainMessageId := dataFromChannel.mainMessageId
-		processVideoGeneration(ctx, b, update, mainMessageId, dataFromChannel.prompt)
+		if update.Message != nil {
+			processVideoGeneration(ctx, b, update, dataFromChannel.mainMessageId, dataFromChannel.prompt)
+		} else if update.CallbackQuery != nil {
+			processCallbackQuery(ctx, b, update)
+		}
 	}
 }

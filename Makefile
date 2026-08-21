@@ -11,4 +11,4 @@ docker-build:
 	docker build -t go-bot-test .
 
 docker-run:
-	docker run -t go-bot-test
+	docker run -t -p 8080:8080 go-bot-test

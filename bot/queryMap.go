@@ -5,9 +5,32 @@ import (
 	"time"
 )
 
+// callbackQueryKind tells apart what an inline result button asks for.
+type callbackQueryKind int
+
+const (
+	// callbackQueryImage draws a picture from the query text.
+	callbackQueryImage callbackQueryKind = iota
+	// callbackQueryTextVideo animates the query text from scratch.
+	callbackQueryTextVideo
+	// callbackQueryImageVideo animates a picture from the user's buffer.
+	callbackQueryImageVideo
+)
+
+// isVideo reports whether the generation belongs to the video queue.
+func (k callbackQueryKind) isVideo() bool {
+	return k == callbackQueryTextVideo || k == callbackQueryImageVideo
+}
+
 type callbackQueryData struct {
+	kind  callbackQueryKind
 	query string
-	date  time.Time
+	// fileID and ownerID are set for callbackQueryImageVideo only. The owner is
+	// the user the picture belongs to, which is not necessarily the one pressing
+	// the button: the inline message can sit in a group where anybody can.
+	fileID  string
+	ownerID int64
+	date    time.Time
 }
 
 type safeQueryMap struct {
@@ -22,13 +45,11 @@ func (c *safeQueryMap) getValue(key string) (callbackQueryData, bool) {
 	return res, ok
 }
 
-func (c *safeQueryMap) setValue(key string, value string) {
+func (c *safeQueryMap) setValue(key string, value callbackQueryData) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	c.value[key] = callbackQueryData{
-		query: value,
-		date:  time.Now(),
-	}
+	value.date = time.Now()
+	c.value[key] = value
 }
 
 func (c *safeQueryMap) deleteValue(key string) {

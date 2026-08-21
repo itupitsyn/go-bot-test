@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
-	"path/filepath"
 	"strings"
 	"telebot/aiApi"
 	"telebot/model"
@@ -170,44 +167,19 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	var imageName string
 	var imageBytes []byte
 
-	if len(imgs) > 0 {
-		maxSizeImg := imgs[0]
-
-		for _, img := range imgs {
-			if maxSizeImg.FileSize < img.FileSize {
-				maxSizeImg = img
-			}
-		}
-
-		file, err := b.GetFile(ctx, &bot.GetFileParams{FileID: maxSizeImg.FileID})
+	if img := getBiggestPhoto(imgs); img != nil {
+		var err error
+		imageBytes, imageName, err = downloadTelegramFile(ctx, b, img.FileID)
 		if err != nil {
-			log.Println("Error getting image by id during I2V generation")
+			log.Println("Error getting image during I2V generation")
+			log.Println(err)
 			processVideoGenerationError("")
 			return
 		}
-
-		downloadURL := b.FileDownloadLink(file)
-
-		resp, err := http.Get(downloadURL)
-		if err != nil {
-			log.Println("Error downloading image by id during I2V generation")
-			processVideoGenerationError("")
-			return
-		}
-		defer resp.Body.Close()
-
-		imageBytes, err = io.ReadAll(resp.Body)
-		if err != nil {
-			log.Println("Error getting image bytes during I2V generation")
-			processVideoGenerationError("")
-			return
-		}
-
-		imageName = filepath.Base(file.FilePath)
 	}
 
 	if prompt == "" {
-		prompt = "animate this image, natural smooth motion"
+		prompt = defaultAnimationPrompt
 	}
 
 	var videoBytes []byte
@@ -512,7 +484,12 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"<b>Английский</b>\n" +
 		"Всё то же самое: «draw a cat meha», «animate a dancing cat». Стили — anime, realistic, cyberpunk, meha.\n\n" +
 		"<b>Inline-режим</b>\n" +
-		fmt.Sprintf("Набери в любом чате @%s и промпт — добавлять бота в этот чат не нужно.", botName)
+		fmt.Sprintf("Набери в любом чате @%s и промпт — добавлять меня в этот чат не нужно.\n", botName) +
+		"«Что рисуем?» — картинка, «Что анимируем?» — видео по описанию.\n\n" +
+		"<b>Своя картинка в inline</b>\n" +
+		"Пришли мне картинку в личку — и в inline-результатах появится пункт «Анимировать мою картинку». Работает в любом чате, даже если меня там нет.\n" +
+		"Промптом станет то, что набрано после имени бота; не набрано ничего — оживлю как есть.\n" +
+		inlineImageBufferHint()
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chatId,
 		Text:            msgText,

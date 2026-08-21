@@ -28,12 +28,11 @@ type aiGenerationProcessorChanel struct {
 func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan *aiGenerationProcessorChanel) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
 
-		sendWaitInlineQueryMessage := func(msgId string) error {
-			_, err := b.EditMessageText(ctx, &bot.EditMessageTextParams{
-				InlineMessageID: msgId,
-				Text:            "ОЖИДАЕМ!!!",
-			})
-			return err
+		sendWaitInlineQueryMessage := func(msgId string) {
+			if err := editInlineStatus(ctx, b, msgId, "ОЖИДАЕМ!!!"); err != nil {
+				log.Println("[error] error setting the inline wait status")
+				log.Println(err)
+			}
 		}
 
 		sendWaitMessage := func(chatId int64, replyToMessageId int) int {
@@ -61,10 +60,37 @@ func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan 
 			processInlineQuery(ctx, b, update)
 		} else if update.CallbackQuery != nil {
 			saveUser(&update.CallbackQuery.From)
-			log.Println("Image generation requested by", utils.GetAnyName(&update.CallbackQuery.From))
+			userName := utils.GetAnyName(&update.CallbackQuery.From)
+
+			// Telegram spins a clock on the button until the press is
+			// acknowledged, and generation takes far longer than it waits.
+			if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+				CallbackQueryID: update.CallbackQuery.ID,
+			}); err != nil {
+				log.Println("[error] error answering callback query")
+				log.Println(err)
+			}
+
+			queryData, ok := queries.getValue(update.CallbackQuery.Data)
+			if !ok {
+				// There is nothing left to generate; processCallbackQuery says
+				// so on the message itself.
+				processCallbackQuery(ctx, b, update)
+				return
+			}
+
 			sendWaitInlineQueryMessage(update.CallbackQuery.InlineMessageID)
-			imgChannel <- &aiGenerationProcessorChanel{
-				update: update,
+
+			if queryData.kind.isVideo() {
+				log.Println("Inline video generation requested by", userName)
+				videoChannel <- &aiGenerationProcessorChanel{
+					update: update,
+				}
+			} else {
+				log.Println("Image generation requested by", userName)
+				imgChannel <- &aiGenerationProcessorChanel{
+					update: update,
+				}
 			}
 		} else if update.Message != nil {
 			chatId := update.Message.Chat.ID
@@ -104,6 +130,15 @@ func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan 
 			} else if strings.HasPrefix(msgTextLower, "/help") || strings.HasPrefix(msgTextLower, "/help@"+botName) {
 				log.Println("Help requested by", userName)
 				processHelp(ctx, b, update)
+			} else if strings.HasPrefix(msgTextLower, "/forget") || strings.HasPrefix(msgTextLower, "/forget@"+botName) {
+				log.Println("Forgetting inline images requested by", userName)
+				processForgetInlineImages(ctx, b, update)
+			} else if update.Message.Chat.Type == "private" && strings.HasPrefix(msgTextLower, "/start "+inlineImageUploadStartParam) {
+				log.Println("Inline image upload started by", userName)
+				processInlineImageUploadStart(ctx, b, update)
+			} else if update.Message.Chat.Type == "private" && len(update.Message.Photo) > 0 {
+				log.Println("Inline image sent by", userName)
+				processInlineImageUpload(ctx, b, update)
 			}
 
 			msgType := update.Message.Chat.Type
