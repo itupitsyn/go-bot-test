@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 )
@@ -19,7 +18,7 @@ func translatePrompt(text string) (string, error) {
 	requestText := fmt.Sprintf(`{"messages":[{"role":"system","content":"Если эта фраза на русском, переведи её на английский. В противном случае оставь как есть. Формат вывода только результат."},{"role":"user","content":%s}], "stream":false, "chat_template_kwargs":{"enable_thinking":false}}`, escaped)
 	requestBody := []byte(requestText)
 
-	res, err := http.Post(fmt.Sprintf("%s/v1/chat/completions", os.Getenv("AI_LLM_URL")), "application/json", bytes.NewReader(requestBody))
+	res, err := llmClient.Post(fmt.Sprintf("%s/v1/chat/completions", os.Getenv("AI_LLM_URL")), "application/json", bytes.NewReader(requestBody))
 	if err != nil {
 		return "", err
 	}

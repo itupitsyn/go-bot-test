@@ -22,7 +22,7 @@ func getT2VId(prompt string, width, height, fps int) (error, string) {
 	jsonStr := fmt.Sprintf(`{"prompt": %s, "width": %d, "height": %d, "fps": %d}`, string(escaped), width, height, fps)
 	url := fmt.Sprintf("%s/api/t2v", os.Getenv("AI_VIDEO_HOST"))
 
-	res, err := http.Post(url, "application/json", bytes.NewReader([]byte(jsonStr)))
+	res, err := submitClient.Post(url, "application/json", bytes.NewReader([]byte(jsonStr)))
 	if err != nil {
 		return err, ""
 	}

@@ -19,13 +19,10 @@ var queries = safeQueryMap{
 	value: make(map[string]callbackQueryData),
 }
 
-type aiGenerationProcessorChanel struct {
-	update        *models.Update
-	mainMessageId int
-	prompt        string
-}
-
-func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan *aiGenerationProcessorChanel) bot.HandlerFunc {
+// getHandler returns the default update handler. Generation runs inline:
+// the library already gives every update its own goroutine, and queueing is
+// the generation service's job, so there is nothing to hand off to here.
+func getHandler() bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 		sendWaitInlineQueryMessage := func(msgId string) {
@@ -83,15 +80,10 @@ func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan 
 
 			if queryData.kind.isVideo() {
 				log.Println("Inline video generation requested by", userName)
-				videoChannel <- &aiGenerationProcessorChanel{
-					update: update,
-				}
 			} else {
 				log.Println("Image generation requested by", userName)
-				imgChannel <- &aiGenerationProcessorChanel{
-					update: update,
-				}
 			}
+			processCallbackQuery(ctx, b, update)
 		} else if update.Message != nil {
 			chatId := update.Message.Chat.ID
 			saveUser(update.Message.From)
@@ -111,19 +103,11 @@ func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan 
 			if imgPrompt != "" {
 				log.Println("Image generation requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
-				imgChannel <- &aiGenerationProcessorChanel{
-					update:        update,
-					mainMessageId: mainMessageId,
-					prompt:        imgPrompt,
-				}
+				processImageGeneration(ctx, b, update, mainMessageId, imgPrompt)
 			} else if isCommand(msgTextLower, "анимируй", "animate") {
 				log.Println("Video generation requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
-				videoChannel <- &aiGenerationProcessorChanel{
-					update:        update,
-					mainMessageId: mainMessageId,
-					prompt:        buildAiPrompt(update.Message, "анимируй", "animate"),
-				}
+				processVideoGeneration(ctx, b, update, mainMessageId, buildAiPrompt(update.Message, "анимируй", "animate"))
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)
 				processAIHelp(ctx, b, update)
@@ -184,11 +168,8 @@ func getHandler(imgChannel chan *aiGenerationProcessorChanel, videoChannel chan 
 }
 
 func New(ctx context.Context) *bot.Bot {
-	imgChannel := make(chan *aiGenerationProcessorChanel)
-	videoChannel := make(chan *aiGenerationProcessorChanel)
-
 	opts := []bot.Option{
-		bot.WithDefaultHandler(getHandler(imgChannel, videoChannel)),
+		bot.WithDefaultHandler(getHandler()),
 		bot.WithAllowedUpdates([]string{"callback_query", "message", "inline_query"}),
 	}
 
@@ -196,9 +177,6 @@ func New(ctx context.Context) *bot.Bot {
 	if err != nil {
 		panic(err)
 	}
-
-	go processImgAiQueue(imgChannel, ctx, b)
-	go processVideoAiQueue(videoChannel, ctx, b)
 
 	self, err := b.GetMe(ctx)
 	if err != nil {

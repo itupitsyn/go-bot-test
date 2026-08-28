@@ -2,16 +2,19 @@ package aiApi
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"time"
+)
+
+const (
+	imagePollInterval = 5 * time.Second
+	imageMaxWait      = time.Hour
 )
 
 var animeSuffix = " anime"
@@ -93,7 +96,7 @@ func generateImage(msgText string) ([]byte, error) {
 	jsonStr := []byte(str)
 
 	url := fmt.Sprintf("%s/api/txt2img", os.Getenv("AI_PAINTER_HOST"))
-	res, err := http.Post(url, "application/json", bytes.NewReader(jsonStr))
+	res, err := submitClient.Post(url, "application/json", bytes.NewReader(jsonStr))
 	if err != nil {
 		return nil, err
 	}
@@ -116,54 +119,5 @@ func generateImage(msgText string) ([]byte, error) {
 		return nil, errors.New("wrong response format while getting id")
 	}
 
-	log.Println("Start waiting for image generation result")
-	i := 0
-	for {
-		if i == 200 {
-			return nil, errors.New("Waiting for image generation is too long")
-		}
-
-		url := fmt.Sprintf("%s/api/result", os.Getenv("AI_PAINTER_HOST"))
-		res, err := http.Get(fmt.Sprintf("%s?id=%s", url, id))
-		if err != nil {
-			return nil, err
-		}
-		defer res.Body.Close()
-
-		resBytes, err := io.ReadAll(res.Body)
-		if err != nil {
-			return nil, err
-		}
-
-		err = json.Unmarshal(resBytes, &jsonRes) // Unmarshalling
-		if err != nil {
-			return nil, err
-		}
-
-		status, ok := jsonRes["status"].(string)
-		if !ok {
-			return nil, errors.New("wrong response format while getting generation status")
-		}
-
-		if status == "pending" || status == "in_progress" {
-			time.Sleep(5 * time.Second)
-			continue
-		} else if status == "error" {
-			return nil, errors.New("error during image generation")
-		}
-
-		break
-	}
-
-	base64img, ok := jsonRes["data"].(string)
-	if !ok {
-		return nil, errors.New("wrong response format while getting image data")
-	}
-
-	decodedBytes, err := base64.StdEncoding.DecodeString(base64img)
-	if err != nil {
-		return nil, err
-	}
-
-	return decodedBytes, nil
+	return waitResult("image", os.Getenv("AI_PAINTER_HOST"), id, imagePollInterval, imageMaxWait)
 }

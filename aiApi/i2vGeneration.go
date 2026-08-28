@@ -91,7 +91,7 @@ func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSiz
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := submitClient.Do(req)
 	if err != nil {
 		return err, ""
 	}
