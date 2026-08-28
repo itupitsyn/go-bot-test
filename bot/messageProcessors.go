@@ -219,6 +219,86 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	utils.ProcessSendMessageError(err, chatId)
 }
 
+// telegramTextLimit is the longest text Telegram accepts in a single message.
+const telegramTextLimit = 4096
+
+func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
+	chatId := update.Message.Chat.ID
+
+	processTranscriptionError := func(text string) {
+		msgText := text
+
+		if msgText == "" {
+			msgText = "Отмена, сервер подох"
+		}
+
+		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatId,
+			Text:      msgText,
+			MessageID: mainMessageId,
+		})
+		utils.ProcessSendMessageError(botError, chatId)
+	}
+
+	// The audio either rides along with the command or sits in the message the
+	// command replies to; in the latter case the text belongs under the
+	// original, not under the command.
+	fileID := getTranscribableFileID(update.Message)
+	replyToId := update.Message.ID
+	if fileID == "" {
+		if reply := update.Message.ReplyToMessage; reply != nil {
+			if replyFileID := getTranscribableFileID(reply); replyFileID != "" {
+				fileID = replyFileID
+				replyToId = reply.ID
+			}
+		}
+	}
+
+	if fileID == "" {
+		log.Println("Transcription: no audio or video in message and no reply carrying one")
+		processTranscriptionError("Нечего расшифровывать")
+		return
+	}
+
+	mediaBytes, mediaName, err := downloadTelegramFile(ctx, b, fileID)
+	if err != nil {
+		log.Println("Error getting media during transcription")
+		log.Println(err)
+		processTranscriptionError("")
+		return
+	}
+
+	text, err := aiApi.GetTranscription(mediaBytes, mediaName)
+	if err != nil {
+		log.Println(err)
+		log.Println("Error transcribing media")
+		processTranscriptionError("")
+		return
+	}
+
+	if strings.TrimSpace(text) == "" {
+		processTranscriptionError("Тишина")
+		return
+	}
+
+	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+		ChatID:    chatId,
+		MessageID: mainMessageId,
+	})
+
+	for _, chunk := range utils.SplitText(text, telegramTextLimit) {
+		_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:          chatId,
+			Text:            chunk,
+			ReplyParameters: &models.ReplyParameters{MessageID: replyToId},
+		})
+		utils.ProcessSendMessageError(err, chatId)
+		if err != nil {
+			return
+		}
+	}
+}
+
 func processPrize(ctx context.Context, b *bot.Bot, update *models.Update, chat *model.Chat) {
 	chatId := update.Message.Chat.ID
 	user := model.User{
@@ -478,11 +558,14 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"<b>Видео</b>\n" +
 		"«Анимируй танцующего котика» — бот сделает видео по описанию.\n" +
 		"Если отправить картинку с подписью «Анимируй ...» или ответить «Анимируй» на сообщение с картинкой, бот оживит именно её.\n\n" +
+		"<b>Расшифровка</b>\n" +
+		"Ответь «Расшифруй» на голосовое, кружочек, аудио или видео — бот пришлёт текст.\n" +
+		"Можно и сразу: отправь аудио с подписью «Расшифруй».\n\n" +
 		"<b>Ответ на сообщение</b>\n" +
 		"Ответь на любое текстовое сообщение словом «Нарисуй» или «Анимируй» — промптом станет текст того сообщения.\n" +
 		"Всё, что допишешь после команды, добавится к промпту: ответ «Нарисуй аниме» на сообщение «котик на подоконнике» даст «котик на подоконнике аниме».\n\n" +
 		"<b>Английский</b>\n" +
-		"Всё то же самое: «draw a cat meha», «animate a dancing cat». Стили — anime, realistic, cyberpunk, meha.\n\n" +
+		"Всё то же самое: «draw a cat meha», «animate a dancing cat», «transcribe». Стили — anime, realistic, cyberpunk, meha.\n\n" +
 		"<b>Inline-режим</b>\n" +
 		fmt.Sprintf("Набери в любом чате @%s и промпт — добавлять меня в этот чат не нужно.\n", botName) +
 		"«Что рисуем?» — картинка, «Что анимируем?» — видео по описанию.\n\n" +
@@ -516,7 +599,7 @@ func processHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"<b>Статистика</b>\n" +
 		"/stats — победители с начала года\n" +
 		"/stats_full — победители за всё время\n\n" +
-		"<b>Ещё я рисую и анимирую</b>\n" +
+		"<b>Ещё я рисую, анимирую и расшифровываю голосовые</b>\n" +
 		"/ai_help — как этим пользоваться."
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chatId,

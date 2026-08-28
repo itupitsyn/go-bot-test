@@ -18,3 +18,7 @@ func GetT2V(msgText string) ([]byte, error) {
 	err, video := generateT2V(msgText)
 	return video, err
 }
+
+func GetTranscription(mediaBytes []byte, mediaName string) (string, error) {
+	return generateTranscription(mediaBytes, mediaName)
+}

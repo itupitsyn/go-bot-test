@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -43,6 +44,34 @@ func getSmallestPhoto(photos []models.PhotoSize) *models.PhotoSize {
 	}
 
 	return smallest
+}
+
+// getTranscribableFileID returns the id of the audio or video a message
+// carries, or an empty string when it carries neither. Documents count only
+// when their type says they are audio or video, so that replying "расшифруй"
+// to a random pdf does not travel to the service just to come back an error.
+func getTranscribableFileID(message *models.Message) string {
+	if message == nil {
+		return ""
+	}
+
+	switch {
+	case message.Voice != nil:
+		return message.Voice.FileID
+	case message.Audio != nil:
+		return message.Audio.FileID
+	case message.VideoNote != nil:
+		return message.VideoNote.FileID
+	case message.Video != nil:
+		return message.Video.FileID
+	case message.Document != nil:
+		mime := message.Document.MimeType
+		if strings.HasPrefix(mime, "audio/") || strings.HasPrefix(mime, "video/") {
+			return message.Document.FileID
+		}
+	}
+
+	return ""
 }
 
 // downloadTelegramFile pulls the bytes of a file behind its id and returns them

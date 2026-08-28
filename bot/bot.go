@@ -90,10 +90,7 @@ func getHandler() bot.HandlerFunc {
 			userName := utils.GetAnyName(update.Message.From)
 			log.Println("Received message from", userName)
 
-			msgTextLower := strings.ToLower(update.Message.Text)
-			if msgTextLower == "" && update.Message.Photo != nil && len(update.Message.Photo) > 0 {
-				msgTextLower = strings.ToLower(update.Message.Caption)
-			}
+			msgTextLower := strings.ToLower(getMessageText(update.Message))
 
 			imgPrompt := ""
 			if isCommand(msgTextLower, "нарисуй", "draw") {
@@ -108,6 +105,10 @@ func getHandler() bot.HandlerFunc {
 				log.Println("Video generation requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
 				processVideoGeneration(ctx, b, update, mainMessageId, buildAiPrompt(update.Message, "анимируй", "animate"))
+			} else if isCommand(msgTextLower, "расшифруй", "transcribe") {
+				log.Println("Transcription requested by", userName)
+				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
+				processTranscription(ctx, b, update, mainMessageId)
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)
 				processAIHelp(ctx, b, update)

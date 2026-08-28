@@ -84,3 +84,44 @@ func TrimPrefixIgnoreCase(s, prefix string) string {
 	}
 	return s
 }
+
+// breakPoint looks for a place to cut the first limit runes: the last line
+// break, failing that the last space, and only for a word longer than the
+// limit itself — which has no separator to break on — the limit.
+func breakPoint(runes []rune, limit int) int {
+	for _, separator := range []rune{'\n', ' '} {
+		for i := limit - 1; i >= 0; i-- {
+			if runes[i] == separator {
+				return i + 1
+			}
+		}
+	}
+
+	return limit
+}
+
+// SplitText cuts text into pieces of at most limit runes, keeping words whole
+// where it can. Telegram refuses messages longer than 4096 characters, and a
+// transcription of a long voice message goes past that easily.
+func SplitText(text string, limit int) []string {
+	runes := []rune(text)
+	if limit <= 0 || len(runes) <= limit {
+		return []string{text}
+	}
+
+	var chunks []string
+	appendChunk := func(chunk string) {
+		if chunk = strings.TrimSpace(chunk); chunk != "" {
+			chunks = append(chunks, chunk)
+		}
+	}
+
+	for len(runes) > limit {
+		cut := breakPoint(runes, limit)
+		appendChunk(string(runes[:cut]))
+		runes = runes[cut:]
+	}
+	appendChunk(string(runes))
+
+	return chunks
+}
