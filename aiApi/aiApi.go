@@ -22,3 +22,9 @@ func GetT2V(msgText string) ([]byte, error) {
 func GetTranscription(mediaBytes []byte, mediaName string) (string, error) {
 	return generateTranscription(mediaBytes, mediaName)
 }
+
+// GetSummary пересказывает текст. languageCode — тег IETF из профиля Telegram,
+// может быть пустым.
+func GetSummary(text, languageCode string) (string, error) {
+	return generateSummary(text, languageCode)
+}

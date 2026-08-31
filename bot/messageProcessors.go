@@ -299,6 +299,61 @@ func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 }
 
+// processSummary retells the message the command replies to. Unlike drawing or
+// transcribing this only costs an llm call, so it goes without the "Жди
+// теперь" song and dance.
+func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatId := update.Message.Chat.ID
+
+	reply := func(text string, replyToId int) {
+		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:          chatId,
+			Text:            text,
+			ReplyParameters: &models.ReplyParameters{MessageID: replyToId},
+		})
+		utils.ProcessSendMessageError(err, chatId)
+	}
+
+	source := update.Message.ReplyToMessage
+	if source == nil {
+		reply("Ответь этим на сообщение, которое надо пересказать", update.Message.ID)
+		return
+	}
+
+	// Пересказывать нечего у голосовых, картинок без подписи и стикеров —
+	// getMessageText для них пуст.
+	text := strings.TrimSpace(getMessageText(source))
+	if text == "" {
+		reply("Тут нет текста", update.Message.ID)
+		return
+	}
+
+	// Язык клиента того, кто спросил, а не того, кто писал исходное сообщение:
+	// пересказ читать спрашивающему. Telegram присылает это поле не всегда.
+	languageCode := ""
+	if update.Message.From != nil {
+		languageCode = update.Message.From.LanguageCode
+	}
+
+	summary, err := aiApi.GetSummary(text, languageCode)
+	if err != nil {
+		log.Println("[error] error summarizing a message")
+		log.Println(err)
+		reply("Отмена, сервер подох", update.Message.ID)
+		return
+	}
+
+	if strings.TrimSpace(summary) == "" {
+		reply("Нечего сказать", update.Message.ID)
+		return
+	}
+
+	// Пересказ вешаем на исходное сообщение, чтобы он читался под ним.
+	for _, chunk := range utils.SplitText(summary, telegramTextLimit) {
+		reply(chunk, source.ID)
+	}
+}
+
 func processPrize(ctx context.Context, b *bot.Bot, update *models.Update, chat *model.Chat) {
 	chatId := update.Message.Chat.ID
 	user := model.User{
@@ -565,11 +620,14 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"<b>Расшифровка</b>\n" +
 		"Ответь «Расшифруй» на голосовое, кружочек, аудио или видео — бот пришлёт текст.\n" +
 		"Можно и сразу: отправь аудио с подписью «Расшифруй».\n\n" +
+		"<b>Пересказ</b>\n" +
+		"Ответь «Что тут» или «Сократи» на длинное сообщение — бот перескажет его в паре предложений.\n" +
+		"Отвечает на языке твоего Telegram.\n\n" +
 		"<b>Ответ на сообщение</b>\n" +
 		"Ответь на любое текстовое сообщение словом «Нарисуй» или «Анимируй» — промптом станет текст того сообщения.\n" +
 		"Всё, что допишешь после команды, добавится к промпту: ответ «Нарисуй аниме» на сообщение «котик на подоконнике» даст «котик на подоконнике аниме».\n\n" +
 		"<b>Английский</b>\n" +
-		"Всё то же самое: «draw a cat meha», «animate a dancing cat around», «transcribe».\n" +
+		"Всё то же самое: «draw a cat meha», «animate a dancing cat around», «transcribe», «summarize».\n" +
 		"Стили — anime, realistic, cyberpunk, meha. Камера — slowly, around, closer, wider, above, lively.\n\n" +
 		"<b>Inline-режим</b>\n" +
 		fmt.Sprintf("Набери в любом чате @%s и промпт — добавлять меня в этот чат не нужно.\n", botName) +

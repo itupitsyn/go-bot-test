@@ -84,3 +84,24 @@ func TestBuildAiPromptUsesCaption(t *testing.T) {
 		t.Errorf("want %q, got %q", "танцующим", got)
 	}
 }
+
+func TestIsCommandWithTwoWordKeyword(t *testing.T) {
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"что тут", true},
+		{"что тут написано", true},
+		{"что туттакое", false},
+		{"а что тут", false},
+		{"чтотут", false},
+		{"сократи", true},
+		{"сократи это", true},
+	}
+
+	for _, c := range cases {
+		if got := isCommand(c.text, "что тут", "сократи"); got != c.want {
+			t.Errorf("isCommand(%q) = %v, want %v", c.text, got, c.want)
+		}
+	}
+}

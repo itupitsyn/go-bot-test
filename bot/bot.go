@@ -110,6 +110,9 @@ func getHandler() bot.HandlerFunc {
 				log.Println("Transcription requested by", userName)
 				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
 				processTranscription(ctx, b, update, mainMessageId)
+			} else if isCommand(msgTextLower, "что тут", "сократи", "summarize", "tldr") {
+				log.Println("Summary requested by", userName)
+				processSummary(ctx, b, update)
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)
 				processAIHelp(ctx, b, update)
