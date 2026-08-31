@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"runtime/debug"
 	"strings"
 	"telebot/raffleLogic"
 	"telebot/utils"
@@ -168,9 +169,26 @@ func getHandler() bot.HandlerFunc {
 	}
 }
 
+// recoverPanics keeps one bad update from taking the whole bot down. Handlers
+// get a goroutine each and a panic in a goroutine kills the process, so
+// without this a single malformed answer from a service would end every
+// generation in flight along with it.
+func recoverPanics(next bot.HandlerFunc) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		defer func() {
+			if problem := recover(); problem != nil {
+				log.Printf("[error] panic while handling an update: %v\n%s", problem, debug.Stack())
+			}
+		}()
+
+		next(ctx, b, update)
+	}
+}
+
 func New(ctx context.Context) *bot.Bot {
 	opts := []bot.Option{
 		bot.WithDefaultHandler(getHandler()),
+		bot.WithMiddlewares(recoverPanics),
 		bot.WithAllowedUpdates([]string{"callback_query", "message", "inline_query"}),
 	}
 

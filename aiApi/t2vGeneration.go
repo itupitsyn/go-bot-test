@@ -53,12 +53,13 @@ func getT2VId(prompt string, width, height, fps int) (error, string) {
 }
 
 func generateT2V(prompt string) (error, []byte) {
-	translatedPrompt, err := translatePrompt(prompt)
+	videoPrompt, err := buildVideoPrompt(prompt)
 	if err != nil {
 		return err, nil
 	}
+	log.Printf("Video prompt: %s\n", videoPrompt)
 
-	err, id := getT2VId(translatedPrompt, defaultVideoWidth, defaultVideoHeight, defaultVideoFps)
+	err, id := getT2VId(videoPrompt, defaultVideoWidth, defaultVideoHeight, defaultVideoFps)
 	if err != nil {
 		return err, nil
 	}

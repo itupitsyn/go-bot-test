@@ -26,12 +26,30 @@ var cyberpunkSuffixRu = " киберпанк"
 var mehaSuffix = " meha"
 var mehaSuffixRu = " меха"
 
+// Шаблоны стилей.
+//
+// Прежние были пресетами Fooocus и писались под SDXL с CFG 5-7, где набивка
+// «качественными» токенами (masterpiece, 8k, highly detailed) работала как
+// рычаг: она растаскивала условный прогноз с безусловным. Сейчас картинки
+// рисует Z-Image Turbo с guidance_scale=0.0 — безусловной ветки нет вовсе,
+// растаскивать нечего, и такие слова превращаются в обычные токены описания,
+// которые разбавляют собой то, что человек реально попросил.
+//
+// Плюс у Z-Image текстовый энкодер на базе LLM: связную фразу он читает
+// заметно лучше, чем список через запятую. Отсюда шаблоны предложениями.
 func getImageTemplate(msgText string) string {
-	animeMeassageTemplate := "%s . anime style, key visual, vibrant, studio anime, highly detailed"
-	realisticMessageTemplate := "%s, RAW candid cinema, 16mm, color graded portra 400 film, remarkable color, ultra realistic, textured skin, remarkable detailed pupils, realistic dull skin noise, visible skin detail, skin fuzz, dry skin, shot with cinematic camera"
-	cyberpunkMessageTemplate := "%s . neon, dystopian, futuristic, digital, vibrant, detailed, high contrast, reminiscent of cyberpunk genre video games"
+	animeMeassageTemplate := "%s. Japanese anime key visual, clean cel shading, vivid saturated colours, expressive linework."
+	realisticMessageTemplate := "%s. Shot on 35mm film in natural daylight, shallow depth of field, realistic skin texture with visible pores, fine grain."
+	// Якорь на игру здесь несёт основную нагрузку. Без него — с одним лишь
+	// описанием освещения — Z-Image рисует обычную ночную улицу с вывесками,
+	// подсвеченными изнутри, а не неон. В прежнем fooocus-шаблоне ту же роль
+	// играл хвост «reminiscent of cyberpunk genre video games».
+	cyberpunkMessageTemplate := "%s. In the style of the Cyberpunk 2077 video game, Night City after dark: " +
+		"glowing neon tube signs and holographic billboards in magenta, cyan and electric blue, " +
+		"dense stacked signage crowding the street, volumetric haze, rain-slick asphalt " +
+		"mirroring the glow, strong bloom and anamorphic lens flare, saturated high-contrast night."
 	initialMessageTemplate := "%s"
-	mehaMessageTemplate := "%s . it should look like it does in a real ife . blend of organic and mechanical elements, futuristic, cybernetic, detailed, intricate"
+	mehaMessageTemplate := "%s. Hard-surface mecha design, panelled armour plating, exposed hydraulics and cabling, brushed metal worn at the edges."
 
 	text := strings.ToLower(msgText)
 
@@ -83,17 +101,20 @@ func generateImage(msgText string) ([]byte, error) {
 		return nil, err
 	}
 
-	enhancedPrompt := fmt.Sprintf(promptTemplate, translatedPrompt)
-	escapedPrompt, err := json.Marshal(enhancedPrompt)
+	enhancedPrompt := applyPromptTemplate(promptTemplate, translatedPrompt)
+	log.Printf("Image prompt: %s\n", enhancedPrompt)
 
-	log.Printf("Translated prompt %s\n", escapedPrompt)
+	return requestImage(enhancedPrompt)
+}
+
+// requestImage отправляет уже собранный промпт и ждёт готовую картинку.
+func requestImage(prompt string) ([]byte, error) {
+	escapedPrompt, err := json.Marshal(prompt)
 	if err != nil {
 		return nil, err
 	}
-	enhancedPrompt = string(escapedPrompt)
 
-	str := fmt.Sprintf(`{"prompt": %s}`, enhancedPrompt)
-	jsonStr := []byte(str)
+	jsonStr := fmt.Appendf(nil, `{"prompt": %s}`, string(escapedPrompt))
 
 	url := fmt.Sprintf("%s/api/txt2img", os.Getenv("AI_PAINTER_HOST"))
 	res, err := submitClient.Post(url, "application/json", bytes.NewReader(jsonStr))

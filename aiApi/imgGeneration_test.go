@@ -26,10 +26,10 @@ func TestGetImagePrompt(t *testing.T) {
 
 func TestGetImageTemplate(t *testing.T) {
 	texts := [][]string{
-		{"нарисуй поросёнка аниме", "anime style"},
-		{"draw meaty pork cyberpunk", "cyberpunk genre video games"},
-		{"Draw поросёнка Anime", "anime style"},
-		{"DRAW a car meha", "organic and mechanical"},
+		{"нарисуй поросёнка аниме", "anime key visual"},
+		{"draw meaty pork cyberpunk", "neon tube signs"},
+		{"Draw поросёнка Anime", "anime key visual"},
+		{"DRAW a car meha", "mecha design"},
 	}
 
 	for _, text := range texts {

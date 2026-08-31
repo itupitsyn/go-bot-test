@@ -10,8 +10,9 @@ import (
 )
 
 // defaultAnimationPrompt is used when a picture is handed to the animator
-// without any words of its own.
-const defaultAnimationPrompt = "animate this image, natural smooth motion"
+// without any words of its own. It only names the subject: the motion and the
+// sound come from the video template around it.
+const defaultAnimationPrompt = "the scene in the picture comes to life"
 
 // isCommand reports whether the already lowercased text starts with one of the
 // keywords used as a standalone word: the keyword is either the whole text or

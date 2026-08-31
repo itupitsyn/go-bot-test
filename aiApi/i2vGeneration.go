@@ -122,17 +122,18 @@ func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSiz
 }
 
 func generateI2V(prompt string, imageBytes []byte, imageName string) (error, []byte) {
-	translatedPrompt, err := translatePrompt(prompt)
+	videoPrompt, err := buildVideoPrompt(prompt)
 	if err != nil {
 		return err, nil
 	}
+	log.Printf("Video prompt: %s\n", videoPrompt)
 
 	err, imgSize := getImageSize(imageBytes)
 	if err != nil {
 		return err, nil
 	}
 
-	err, id := getI2VId(translatedPrompt, imageBytes, imageName, *imgSize, defaultVideoFps)
+	err, id := getI2VId(videoPrompt, imageBytes, imageName, *imgSize, defaultVideoFps)
 	if err != nil {
 		return err, nil
 	}
