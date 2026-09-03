@@ -105,3 +105,28 @@ func TestIsCommandWithTwoWordKeyword(t *testing.T) {
 		}
 	}
 }
+
+func TestIsBareCommand(t *testing.T) {
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"что тут", true},
+		{"что тут?", true},
+		{"что тут???", true},
+		{"что тут ?", true},
+		{"  что тут  ", true},
+		{"что тут.", false},
+		{"что тут!", false},
+		{"что тут написано", false},
+		{"что тут происходит?", false},
+		{"а что тут", false},
+		{"чтотут", false},
+	}
+
+	for _, c := range cases {
+		if got := isBareCommand(c.text, "что тут"); got != c.want {
+			t.Errorf("isBareCommand(%q) = %v, want %v", c.text, got, c.want)
+		}
+	}
+}

@@ -65,3 +65,22 @@ func buildAiPrompt(message *models.Message, keywords ...string) string {
 
 	return prompt
 }
+
+// isBareCommand reports whether the already lowercased text is nothing but one
+// of the keywords, optionally followed by question marks. Unlike isCommand it
+// takes no arguments after the keyword: «что тут» и «что тут?» — это команда,
+// а «что тут происходит» — обычная болтовня, на которую бот лезть не должен.
+func isBareCommand(text string, keywords ...string) bool {
+	text = strings.TrimSpace(text)
+	for _, keyword := range keywords {
+		rest, ok := strings.CutPrefix(text, keyword)
+		if !ok {
+			continue
+		}
+		if strings.TrimLeft(rest, " ?") == "" {
+			return true
+		}
+	}
+
+	return false
+}

@@ -314,9 +314,10 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 		utils.ProcessSendMessageError(err, chatId)
 	}
 
+	// Команда без ответа на сообщение — это просто реплика в чате, а не
+	// просьба к боту: молчим, чтобы не мусорить подсказками.
 	source := update.Message.ReplyToMessage
 	if source == nil {
-		reply("Ответь этим на сообщение, которое надо пересказать", update.Message.ID)
 		return
 	}
 
@@ -324,7 +325,6 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	// getMessageText для них пуст.
 	text := strings.TrimSpace(getMessageText(source))
 	if text == "" {
-		reply("Тут нет текста", update.Message.ID)
 		return
 	}
 
