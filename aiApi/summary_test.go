@@ -8,29 +8,39 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func TestSummarySystemPromptCarriesLanguage(t *testing.T) {
-	for _, code := range []string{"ru", "en", "pt-BR"} {
-		prompt := summarySystemPrompt(code)
+func TestSummarySystemPromptNamesTheLanguage(t *testing.T) {
+	cases := [][2]string{
+		{"ru", "русском языке"},
+		{"de", "немецком языке"},
+		{"he", "иврите"},
+		{"hi", "хинди"},
+		{"pt-BR", "португальском языке"},
+		{"EN", "английском языке"},
+	}
 
-		if !strings.Contains(prompt, code) {
-			t.Errorf("summarySystemPrompt(%q) does not mention the code: %s", code, prompt)
+	for _, c := range cases {
+		prompt := summarySystemPrompt(c[0])
+
+		if !strings.Contains(prompt, c[1]) {
+			t.Errorf("summarySystemPrompt(%q): нет %q в %s", c[0], c[1], prompt)
 		}
-		if !strings.Contains(prompt, "языке самого текста") {
-			t.Errorf("summarySystemPrompt(%q) drops the fallback for an unknown code", code)
+		// Сам код в промпт попадать не должен: расшифровывать его модель
+		// не обязана, за неё это уже сделали.
+		if strings.Contains(prompt, "IETF") {
+			t.Errorf("summarySystemPrompt(%q) всё ещё просит разобрать код: %s", c[0], prompt)
 		}
 	}
 }
 
-func TestSummarySystemPromptWithoutLanguage(t *testing.T) {
-	// Telegram присылает language_code не всегда — тогда про код речи быть
-	// не должно вовсе, иначе модель получит инструкцию про пустую строку.
-	prompt := summarySystemPrompt("")
+func TestSummarySystemPromptFallsBack(t *testing.T) {
+	// Telegram присылает language_code не всегда, а код может оказаться и
+	// незнакомым — тогда язык берём из самого текста.
+	for _, code := range []string{"", "  ", "xx", "klingon"} {
+		prompt := summarySystemPrompt(code)
 
-	if strings.Contains(prompt, "IETF") {
-		t.Errorf("пустой код не должен попадать в промпт: %s", prompt)
-	}
-	if !strings.Contains(prompt, "языке самого текста") {
-		t.Errorf("нет запасной инструкции про язык: %s", prompt)
+		if !strings.Contains(prompt, "языке самого текста") {
+			t.Errorf("summarySystemPrompt(%q): нет запасной инструкции: %s", code, prompt)
+		}
 	}
 }
 

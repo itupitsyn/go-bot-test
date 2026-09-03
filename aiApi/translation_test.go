@@ -18,11 +18,6 @@ func TestContentOf(t *testing.T) {
 			`{"choices":[{"message":{"content":"  a cat\n"}}]}`,
 			"a cat",
 		},
-		{
-			"reasoning в content отбрасывается",
-			`{"choices":[{"message":{"content":"<think>переводим</think>\na cat"}}]}`,
-			"a cat",
-		},
 	}
 
 	for _, c := range cases {
@@ -52,7 +47,6 @@ func TestContentOfBadResponses(t *testing.T) {
 		{"content не строка", `{"choices":[{"message":{"content":42}}]}`},
 		{"ошибка вместо ответа", `{"error":{"message":"context window exceeded"}}`},
 		{"пустой content", `{"choices":[{"message":{"content":"   "}}]}`},
-		{"оборванный reasoning", `{"choices":[{"message":{"content":"<think>думаем</think>"}}]}`},
 		{"не json", `<html>502 Bad Gateway</html>`},
 		{"пустое тело", ``},
 		{"json null", `null`},

@@ -45,19 +45,10 @@ func contentOf(resBytes []byte) (string, error) {
 		return "", fmt.Errorf("llm returned no choices: %s", string(resBytes))
 	}
 
-	content := parsed.Choices[0].Message.Content
-
-	// Подстраховка: если модель всё же вернёт reasoning прямо в content
-	// (<think>...</think>), оставляем только текст после закрывающего тега.
-	// llama.cpp сейчас кладёт reasoning в отдельное поле, но бэкенд может смениться.
-	if idx := strings.LastIndex(content, "</think>"); idx != -1 {
-		content = content[idx+len("</think>"):]
-	}
-	content = strings.TrimSpace(content)
+	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
 
 	// Пустой ответ дальше не пускаем: генератор получил бы пустой промпт и
-	// нарисовал бы что угодно. Оборванный reasoning приводит сюда же — от
-	// <think> без закрывающего тега не остаётся ничего.
+	// нарисовал бы что угодно.
 	if content == "" {
 		return "", fmt.Errorf("llm returned an empty answer: %s", string(resBytes))
 	}
