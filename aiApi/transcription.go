@@ -26,14 +26,18 @@ func getTranscriptionId(mediaBytes []byte, mediaName string, caller Caller) (str
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	part, err := writer.CreateFormFile("file", mediaName)
-	if err != nil {
-		return "", err
-	}
+	// Поля — строго до файла: WriteField создаёт новую часть и тем самым
+	// закрывает предыдущую, после чего io.Copy в неё падает с
+	// "multipart: can't write to finished part". Порядок как в i2vGeneration.go.
 	if user := caller.userForm(); user != "" {
 		if err := writer.WriteField("user", user); err != nil {
 			return "", err
 		}
+	}
+
+	part, err := writer.CreateFormFile("file", mediaName)
+	if err != nil {
+		return "", err
 	}
 	if _, err = io.Copy(part, bytes.NewReader(mediaBytes)); err != nil {
 		return "", err
