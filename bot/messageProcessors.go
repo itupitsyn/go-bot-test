@@ -309,8 +309,9 @@ func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update
 }
 
 // processSummary retells the message the command replies to. Unlike drawing or
-// transcribing this only costs an llm call, so it goes without the "Жди
-// теперь" song and dance.
+// transcribing this only costs an llm call, so it goes without the queue and
+// the "Жди теперь" song and dance — just one short "занят" while the llm
+// thinks.
 func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 
@@ -337,6 +338,32 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 		return
 	}
 
+	// Пересказ считается несколько секунд, и молчать их нельзя: непонятно,
+	// услышали вообще или нет. Ни паузы, ни места в очереди тут не нужно —
+	// очередь про генерацию, а пересказ идёт мимо неё.
+	waitMsg, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:          chatId,
+		Text:            summaryWaitText,
+		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+	})
+	utils.ProcessSendMessageError(err, chatId)
+
+	// Отказ кладём в то же сообщение, чтобы не плодить их по чату. Если
+	// отправить «Ща, сек» не вышло, говорим обычным ответом.
+	fail := func(reason string) {
+		if waitMsg == nil {
+			reply(reason, update.Message.ID)
+			return
+		}
+
+		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatId,
+			MessageID: waitMsg.ID,
+			Text:      reason,
+		})
+		utils.ProcessSendMessageError(botError, chatId)
+	}
+
 	// Язык клиента того, кто спросил, а не того, кто писал исходное сообщение:
 	// пересказ читать спрашивающему. Telegram присылает это поле не всегда.
 	languageCode := ""
@@ -348,13 +375,20 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if err != nil {
 		log.Println("[error] error summarizing a message")
 		log.Println(err)
-		reply("Отмена, сервер подох", update.Message.ID)
+		fail("Отмена, сервер подох")
 		return
 	}
 
 	if strings.TrimSpace(summary) == "" {
-		reply("Нечего сказать", update.Message.ID)
+		fail("Нечего сказать")
 		return
+	}
+
+	if waitMsg != nil {
+		b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+			ChatID:    chatId,
+			MessageID: waitMsg.ID,
+		})
 	}
 
 	// Пересказ вешаем на исходное сообщение, чтобы он читался под ним.
