@@ -16,6 +16,6 @@ const (
 
 // waitVideoResult polls the video service /api/result endpoint until the
 // generation is finished and returns the decoded video bytes.
-func waitVideoResult(id string) ([]byte, error) {
-	return waitResult("video", os.Getenv("AI_VIDEO_HOST"), id, videoPollInterval, videoMaxWait)
+func waitVideoResult(id string, onProgress ProgressFunc) ([]byte, error) {
+	return waitResult("video", os.Getenv("AI_VIDEO_HOST"), id, videoPollInterval, videoMaxWait, onProgress)
 }

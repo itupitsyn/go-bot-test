@@ -90,7 +90,9 @@ func replaceInlineMedia(ctx context.Context, b *bot.Bot, inlineMessageId string,
 // generateInlineImage draws the picture asked for by an inline query and puts it
 // into the message the button was pressed in.
 func generateInlineImage(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData) error {
-	imageBytes, err := aiApi.GetImage(queryData.query)
+	wait := newInlineWaitMessage(ctx, b, inlineMessageId)
+	imageBytes, err := aiApi.GetImage(queryData.query, wait.progress)
+	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating image: %w", err)
 	}
@@ -156,7 +158,9 @@ func putInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, vid
 // generateInlineTextVideo animates the words of the inline query, with no
 // picture to start from.
 func generateInlineTextVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData) error {
-	videoBytes, err := aiApi.GetT2V(queryData.query)
+	wait := newInlineWaitMessage(ctx, b, inlineMessageId)
+	videoBytes, err := aiApi.GetT2V(queryData.query, wait.progress)
+	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating t2v: %w", err)
 	}
@@ -182,7 +186,9 @@ func generateInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string
 		prompt = defaultAnimationPrompt
 	}
 
-	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imageName)
+	wait := newInlineWaitMessage(ctx, b, inlineMessageId)
+	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imageName, wait.progress)
+	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating i2v: %w", err)
 	}

@@ -114,7 +114,7 @@ func TestImageTemplateProbe(t *testing.T) {
 			t.Logf("[%s/%s] %s", c.slug, arm, prompt)
 
 			for i := 1; i <= seeds; i++ {
-				imageBytes, err := requestImage(prompt)
+				imageBytes, err := requestImage(prompt, nil)
 				if err != nil {
 					t.Errorf("%s/%s #%d: %v", c.slug, arm, i, err)
 					continue

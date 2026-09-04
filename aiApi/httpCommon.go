@@ -75,7 +75,9 @@ func pollResult(host, id string) (*resultResponse, error) {
 //
 // maxWait отсчитывается по паузам между опросами, так что реальное ожидание
 // выходит чуть длиннее на суммарное время самих запросов.
-func waitData(kind, host, id string, interval, maxWait time.Duration) (json.RawMessage, error) {
+//
+// onProgress, если задан, получает место задачи в очереди на каждом опросе.
+func waitData(kind, host, id string, interval, maxWait time.Duration, onProgress ProgressFunc) (json.RawMessage, error) {
 	log.Printf("Start waiting for %s result\n", kind)
 
 	maxAttempts := int(maxWait / interval)
@@ -100,6 +102,7 @@ func waitData(kind, host, id string, interval, maxWait time.Duration) (json.RawM
 
 		switch res.Status {
 		case "pending", "in_progress":
+			reportProgress(host, id, onProgress)
 			time.Sleep(interval)
 			continue
 		case "error":
@@ -122,8 +125,8 @@ func waitData(kind, host, id string, interval, maxWait time.Duration) (json.RawM
 }
 
 // waitResult ждёт результат генерации и раскодирует его из base64.
-func waitResult(kind, host, id string, interval, maxWait time.Duration) ([]byte, error) {
-	data, err := waitData(kind+" generation", host, id, interval, maxWait)
+func waitResult(kind, host, id string, interval, maxWait time.Duration, onProgress ProgressFunc) ([]byte, error) {
+	data, err := waitData(kind+" generation", host, id, interval, maxWait, onProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -134,4 +137,20 @@ func waitResult(kind, host, id string, interval, maxWait time.Duration) ([]byte,
 	}
 
 	return base64.StdEncoding.DecodeString(base64data)
+}
+
+// reportProgress сообщает вызывающему, где задача в очереди. Ошибку запроса и
+// пропавшую задачу глотаем молча: место в очереди — украшение, ронять из-за
+// него генерацию, которая на сервисе идёт нормально, незачем.
+func reportProgress(host, id string, onProgress ProgressFunc) {
+	if onProgress == nil {
+		return
+	}
+
+	status, err := getQueueStatus(host, id)
+	if err != nil || status == nil {
+		return
+	}
+
+	onProgress(*status)
 }

@@ -92,7 +92,7 @@ func getImagePrompt(msgText string) string {
 	return text
 }
 
-func generateImage(msgText string) ([]byte, error) {
+func generateImage(msgText string, onProgress ProgressFunc) ([]byte, error) {
 	prompt := getImagePrompt(msgText)
 	log.Printf("Got prompt %s\n", prompt)
 	promptTemplate := getImageTemplate(msgText)
@@ -104,11 +104,11 @@ func generateImage(msgText string) ([]byte, error) {
 	enhancedPrompt := applyPromptTemplate(promptTemplate, translatedPrompt)
 	log.Printf("Image prompt: %s\n", enhancedPrompt)
 
-	return requestImage(enhancedPrompt)
+	return requestImage(enhancedPrompt, onProgress)
 }
 
 // requestImage отправляет уже собранный промпт и ждёт готовую картинку.
-func requestImage(prompt string) ([]byte, error) {
+func requestImage(prompt string, onProgress ProgressFunc) ([]byte, error) {
 	escapedPrompt, err := json.Marshal(prompt)
 	if err != nil {
 		return nil, err
@@ -140,5 +140,5 @@ func requestImage(prompt string) ([]byte, error) {
 		return nil, errors.New("wrong response format while getting id")
 	}
 
-	return waitResult("image", os.Getenv("AI_PAINTER_HOST"), id, imagePollInterval, imageMaxWait)
+	return waitResult("image", os.Getenv("AI_PAINTER_HOST"), id, imagePollInterval, imageMaxWait, onProgress)
 }

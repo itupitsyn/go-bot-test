@@ -8,7 +8,6 @@ import (
 	"strings"
 	"telebot/raffleLogic"
 	"telebot/utils"
-	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -27,30 +26,14 @@ func getHandler() bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 		sendWaitInlineQueryMessage := func(msgId string) {
-			if err := editInlineStatus(ctx, b, msgId, "ОЖИДАЕМ!!!"); err != nil {
+			if err := editInlineStatus(ctx, b, msgId, inlineOkText); err != nil {
 				log.Println("[error] error setting the inline wait status")
 				log.Println(err)
 			}
 		}
 
-		sendWaitMessage := func(chatId int64, replyToMessageId int) int {
-			msg, err := b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID:          chatId,
-				Text:            "Ладно",
-				ReplyParameters: &models.ReplyParameters{MessageID: replyToMessageId, ChatID: chatId},
-			})
-			utils.ProcessSendMessageError(err, chatId)
-
-			time.Sleep(2 * time.Second)
-
-			_, err = b.EditMessageText(ctx, &bot.EditMessageTextParams{
-				MessageID: msg.ID,
-				ChatID:    chatId,
-				Text:      "Жди теперь",
-			})
-			utils.ProcessSendMessageError(err, chatId)
-
-			return msg.ID
+		sendWaitMessage := func(chatId int64, replyToMessageId int) *waitMessage {
+			return newChatWaitMessage(ctx, b, chatId, replyToMessageId)
 		}
 
 		if update.InlineQuery != nil {
@@ -100,16 +83,16 @@ func getHandler() bot.HandlerFunc {
 
 			if imgPrompt != "" {
 				log.Println("Image generation requested by", userName)
-				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
-				processImageGeneration(ctx, b, update, mainMessageId, imgPrompt)
+				wait := sendWaitMessage(chatId, update.Message.ID)
+				processImageGeneration(ctx, b, update, wait, imgPrompt)
 			} else if isCommand(msgTextLower, "анимируй", "animate") {
 				log.Println("Video generation requested by", userName)
-				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
-				processVideoGeneration(ctx, b, update, mainMessageId, buildAiPrompt(update.Message, "анимируй", "animate"))
+				wait := sendWaitMessage(chatId, update.Message.ID)
+				processVideoGeneration(ctx, b, update, wait, buildAiPrompt(update.Message, "анимируй", "animate"))
 			} else if isCommand(msgTextLower, "расшифруй", "transcribe") {
 				log.Println("Transcription requested by", userName)
-				mainMessageId := sendWaitMessage(chatId, update.Message.ID)
-				processTranscription(ctx, b, update, mainMessageId)
+				wait := sendWaitMessage(chatId, update.Message.ID)
+				processTranscription(ctx, b, update, wait)
 			} else if isBareCommand(msgTextLower, "что тут") || isBareCommand(msgTextLower, "сократи", "summarize", "tldr") {
 				log.Println("Summary requested by", userName)
 				processSummary(ctx, b, update)

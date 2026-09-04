@@ -52,7 +52,7 @@ func getT2VId(prompt string, width, height, fps int) (error, string) {
 	return nil, id
 }
 
-func generateT2V(prompt string) (error, []byte) {
+func generateT2V(prompt string, onProgress ProgressFunc) (error, []byte) {
 	videoPrompt, err := buildVideoPrompt(prompt)
 	if err != nil {
 		return err, nil
@@ -64,7 +64,7 @@ func generateT2V(prompt string) (error, []byte) {
 		return err, nil
 	}
 
-	video, err := waitVideoResult(id)
+	video, err := waitVideoResult(id, onProgress)
 	if err != nil {
 		return err, nil
 	}

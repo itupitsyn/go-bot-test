@@ -130,13 +130,13 @@ func formatTranscription(result transcriptionResult) string {
 	return text.String()
 }
 
-func generateTranscription(mediaBytes []byte, mediaName string) (string, error) {
+func generateTranscription(mediaBytes []byte, mediaName string, onProgress ProgressFunc) (string, error) {
 	id, err := getTranscriptionId(mediaBytes, mediaName)
 	if err != nil {
 		return "", err
 	}
 
-	data, err := waitData("transcription", os.Getenv("AI_TRANSCRIPTION_HOST"), id, transcriptionPollInterval, transcriptionMaxWait)
+	data, err := waitData("transcription", os.Getenv("AI_TRANSCRIPTION_HOST"), id, transcriptionPollInterval, transcriptionMaxWait, onProgress)
 	if err != nil {
 		return "", err
 	}

@@ -92,19 +92,22 @@ func processParticipation(update *models.Update) {
 	participants.Save()
 }
 
-func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int, prompt string) {
+func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string) {
 	chatId := update.Message.Chat.ID
 
 	processImgGenerationError := func() {
+		wait.done()
+
 		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
 			ChatID:    chatId,
 			Text:      "Отмена, сервер подох",
-			MessageID: mainMessageId,
+			MessageID: wait.id(),
 		})
 		utils.ProcessSendMessageError(botError, chatId)
 	}
 
-	imageBytes, err := aiApi.GetImage(prompt)
+	imageBytes, err := aiApi.GetImage(prompt, wait.progress)
+	wait.done()
 	if err != nil {
 		log.Println(err)
 		log.Println("[error] error generating image")
@@ -115,7 +118,7 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
 	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
 		ChatID:    chatId,
-		MessageID: mainMessageId,
+		MessageID: wait.id(),
 	})
 
 	_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
@@ -132,10 +135,12 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	utils.ProcessSendMessageError(err, chatId)
 }
 
-func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int, prompt string) {
+func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string) {
 	chatId := update.Message.Chat.ID
 
 	processVideoGenerationError := func(text string) {
+		wait.done()
+
 		msgText := text
 
 		if msgText == "" {
@@ -145,7 +150,7 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
 			ChatID:    chatId,
 			Text:      msgText,
-			MessageID: mainMessageId,
+			MessageID: wait.id(),
 		})
 		utils.ProcessSendMessageError(botError, chatId)
 	}
@@ -186,10 +191,11 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	var err error
 
 	if imageBytes != nil {
-		videoBytes, err = aiApi.GetI2V(prompt, imageBytes, imageName)
+		videoBytes, err = aiApi.GetI2V(prompt, imageBytes, imageName, wait.progress)
 	} else {
-		videoBytes, err = aiApi.GetT2V(prompt)
+		videoBytes, err = aiApi.GetT2V(prompt, wait.progress)
 	}
+	wait.done()
 
 	if err != nil {
 		log.Println(err)
@@ -202,7 +208,7 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
 		ChatID:    chatId,
-		MessageID: mainMessageId,
+		MessageID: wait.id(),
 	})
 
 	_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
@@ -222,10 +228,12 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 // telegramTextLimit is the longest text Telegram accepts in a single message.
 const telegramTextLimit = 4096
 
-func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update, mainMessageId int) {
+func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage) {
 	chatId := update.Message.Chat.ID
 
 	processTranscriptionError := func(text string) {
+		wait.done()
+
 		msgText := text
 
 		if msgText == "" {
@@ -235,7 +243,7 @@ func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update
 		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
 			ChatID:    chatId,
 			Text:      msgText,
-			MessageID: mainMessageId,
+			MessageID: wait.id(),
 		})
 		utils.ProcessSendMessageError(botError, chatId)
 	}
@@ -268,7 +276,8 @@ func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update
 		return
 	}
 
-	text, err := aiApi.GetTranscription(mediaBytes, mediaName)
+	text, err := aiApi.GetTranscription(mediaBytes, mediaName, wait.progress)
+	wait.done()
 	if err != nil {
 		log.Println(err)
 		log.Println("Error transcribing media")
@@ -283,7 +292,7 @@ func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update
 
 	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
 		ChatID:    chatId,
-		MessageID: mainMessageId,
+		MessageID: wait.id(),
 	})
 
 	for _, chunk := range utils.SplitText(text, telegramTextLimit) {
