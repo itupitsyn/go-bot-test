@@ -1,9 +1,9 @@
 package aiApi
 
-// onProgress у генерации получает место задачи в очереди сервиса на каждом
-// опросе результата; nil — не отслеживать очередь.
-func GetImage(msgText string, onProgress ProgressFunc) ([]byte, error) {
-	imageData, err := generateImage(msgText, onProgress)
+// caller у генерации — кто просит (id для потолка и круга на сервисе) и куда
+// сообщать о месте в очереди. Отказ по потолку приходит как ErrQueueFull.
+func GetImage(msgText string, caller Caller) ([]byte, error) {
+	imageData, err := generateImage(msgText, caller)
 	if err != nil {
 		return nil, err
 	}
@@ -11,18 +11,18 @@ func GetImage(msgText string, onProgress ProgressFunc) ([]byte, error) {
 	return imageData, nil
 }
 
-func GetI2V(msgText string, imageBytes []byte, imageName string, onProgress ProgressFunc) ([]byte, error) {
-	err, video := generateI2V(msgText, imageBytes, imageName, onProgress)
+func GetI2V(msgText string, imageBytes []byte, imageName string, caller Caller) ([]byte, error) {
+	err, video := generateI2V(msgText, imageBytes, imageName, caller)
 	return video, err
 }
 
-func GetT2V(msgText string, onProgress ProgressFunc) ([]byte, error) {
-	err, video := generateT2V(msgText, onProgress)
+func GetT2V(msgText string, caller Caller) ([]byte, error) {
+	err, video := generateT2V(msgText, caller)
 	return video, err
 }
 
-func GetTranscription(mediaBytes []byte, mediaName string, onProgress ProgressFunc) (string, error) {
-	return generateTranscription(mediaBytes, mediaName, onProgress)
+func GetTranscription(mediaBytes []byte, mediaName string, caller Caller) (string, error) {
+	return generateTranscription(mediaBytes, mediaName, caller)
 }
 
 // GetSummary пересказывает текст. languageCode — тег IETF из профиля Telegram,

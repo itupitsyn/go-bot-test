@@ -92,7 +92,7 @@ func getImagePrompt(msgText string) string {
 	return text
 }
 
-func generateImage(msgText string, onProgress ProgressFunc) ([]byte, error) {
+func generateImage(msgText string, caller Caller) ([]byte, error) {
 	prompt := getImagePrompt(msgText)
 	log.Printf("Got prompt %s\n", prompt)
 	promptTemplate := getImageTemplate(msgText)
@@ -104,17 +104,17 @@ func generateImage(msgText string, onProgress ProgressFunc) ([]byte, error) {
 	enhancedPrompt := applyPromptTemplate(promptTemplate, translatedPrompt)
 	log.Printf("Image prompt: %s\n", enhancedPrompt)
 
-	return requestImage(enhancedPrompt, onProgress)
+	return requestImage(enhancedPrompt, caller)
 }
 
 // requestImage отправляет уже собранный промпт и ждёт готовую картинку.
-func requestImage(prompt string, onProgress ProgressFunc) ([]byte, error) {
+func requestImage(prompt string, caller Caller) ([]byte, error) {
 	escapedPrompt, err := json.Marshal(prompt)
 	if err != nil {
 		return nil, err
 	}
 
-	jsonStr := fmt.Appendf(nil, `{"prompt": %s}`, string(escapedPrompt))
+	jsonStr := fmt.Appendf(nil, `{"prompt": %s%s}`, string(escapedPrompt), caller.userJSON())
 
 	url := fmt.Sprintf("%s/api/txt2img", os.Getenv("AI_PAINTER_HOST"))
 	res, err := submitClient.Post(url, "application/json", bytes.NewReader(jsonStr))
@@ -129,6 +129,10 @@ func requestImage(prompt string, onProgress ProgressFunc) ([]byte, error) {
 		return nil, err
 	}
 
+	if err := checkSubmitStatus("image", res.StatusCode, resBytes); err != nil {
+		return nil, err
+	}
+
 	var jsonRes map[string]any
 	err = json.Unmarshal(resBytes, &jsonRes)
 	if err != nil {
@@ -140,5 +144,5 @@ func requestImage(prompt string, onProgress ProgressFunc) ([]byte, error) {
 		return nil, errors.New("wrong response format while getting id")
 	}
 
-	return waitResult("image", os.Getenv("AI_PAINTER_HOST"), id, imagePollInterval, imageMaxWait, onProgress)
+	return waitResult("image", os.Getenv("AI_PAINTER_HOST"), id, imagePollInterval, imageMaxWait, caller.Progress)
 }

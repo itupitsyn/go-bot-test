@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"errors"
 	"fmt"
 	"telebot/aiApi"
 	"time"
@@ -30,4 +31,15 @@ func formatEta(eta time.Duration) string {
 	}
 
 	return fmt.Sprintf("минут %d", minutes)
+}
+
+// generationErrorText — что показать вместо результата. Отказ по потолку это
+// не поломка: сказать про подохший сервер, когда человек просто нагенерил
+// лишнего, значит соврать.
+func generationErrorText(err error) string {
+	if errors.Is(err, aiApi.ErrQueueFull) {
+		return queueFullText
+	}
+
+	return serverDeadText
 }

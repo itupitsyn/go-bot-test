@@ -20,7 +20,7 @@ const (
 )
 
 // getTranscriptionId отправляет файл на распознавание и возвращает id задачи.
-func getTranscriptionId(mediaBytes []byte, mediaName string) (string, error) {
+func getTranscriptionId(mediaBytes []byte, mediaName string, caller Caller) (string, error) {
 	log.Println("Start getting transcription id")
 
 	body := &bytes.Buffer{}
@@ -29,6 +29,11 @@ func getTranscriptionId(mediaBytes []byte, mediaName string) (string, error) {
 	part, err := writer.CreateFormFile("file", mediaName)
 	if err != nil {
 		return "", err
+	}
+	if user := caller.userForm(); user != "" {
+		if err := writer.WriteField("user", user); err != nil {
+			return "", err
+		}
 	}
 	if _, err = io.Copy(part, bytes.NewReader(mediaBytes)); err != nil {
 		return "", err
@@ -56,8 +61,8 @@ func getTranscriptionId(mediaBytes []byte, mediaName string) (string, error) {
 		return "", err
 	}
 
-	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("transcription request failed with status %d: %s", res.StatusCode, string(resBytes))
+	if err := checkSubmitStatus("transcription", res.StatusCode, resBytes); err != nil {
+		return "", err
 	}
 
 	var jsonRes map[string]any
@@ -130,13 +135,13 @@ func formatTranscription(result transcriptionResult) string {
 	return text.String()
 }
 
-func generateTranscription(mediaBytes []byte, mediaName string, onProgress ProgressFunc) (string, error) {
-	id, err := getTranscriptionId(mediaBytes, mediaName)
+func generateTranscription(mediaBytes []byte, mediaName string, caller Caller) (string, error) {
+	id, err := getTranscriptionId(mediaBytes, mediaName, caller)
 	if err != nil {
 		return "", err
 	}
 
-	data, err := waitData("transcription", os.Getenv("AI_TRANSCRIPTION_HOST"), id, transcriptionPollInterval, transcriptionMaxWait, onProgress)
+	data, err := waitData("transcription", os.Getenv("AI_TRANSCRIPTION_HOST"), id, transcriptionPollInterval, transcriptionMaxWait, caller.Progress)
 	if err != nil {
 		return "", err
 	}

@@ -154,3 +154,19 @@ func reportProgress(host, id string, onProgress ProgressFunc) {
 
 	onProgress(*status)
 }
+
+// checkSubmitStatus разбирает код ответа на постановку задачи.
+//
+// Отказ по потолку (429) отдаём отдельной ошибкой: сервис не сломался, он
+// просто не берёт у этого человека больше, и наверху это показывается совсем
+// другими словами.
+func checkSubmitStatus(kind string, statusCode int, body []byte) error {
+	switch statusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusTooManyRequests:
+		return fmt.Errorf("%s: %w", kind, ErrQueueFull)
+	default:
+		return fmt.Errorf("%s request failed with status %d: %s", kind, statusCode, string(body))
+	}
+}

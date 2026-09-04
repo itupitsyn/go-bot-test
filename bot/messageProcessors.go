@@ -95,23 +95,23 @@ func processParticipation(update *models.Update) {
 func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string) {
 	chatId := update.Message.Chat.ID
 
-	processImgGenerationError := func() {
+	processImgGenerationError := func(text string) {
 		wait.done()
 
 		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
 			ChatID:    chatId,
-			Text:      "Отмена, сервер подох",
+			Text:      text,
 			MessageID: wait.id(),
 		})
 		utils.ProcessSendMessageError(botError, chatId)
 	}
 
-	imageBytes, err := aiApi.GetImage(prompt, wait.progress)
+	imageBytes, err := aiApi.GetImage(prompt, messageCaller(update.Message, wait))
 	wait.done()
 	if err != nil {
 		log.Println(err)
 		log.Println("[error] error generating image")
-		processImgGenerationError()
+		processImgGenerationError(generationErrorText(err))
 		return
 	}
 
@@ -130,7 +130,7 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	})
 
 	if err != nil {
-		processImgGenerationError()
+		processImgGenerationError(serverDeadText)
 	}
 	utils.ProcessSendMessageError(err, chatId)
 }
@@ -144,7 +144,7 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		msgText := text
 
 		if msgText == "" {
-			msgText = "Отмена, сервер подох"
+			msgText = serverDeadText
 		}
 
 		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
@@ -190,17 +190,18 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	var videoBytes []byte
 	var err error
 
+	caller := messageCaller(update.Message, wait)
 	if imageBytes != nil {
-		videoBytes, err = aiApi.GetI2V(prompt, imageBytes, imageName, wait.progress)
+		videoBytes, err = aiApi.GetI2V(prompt, imageBytes, imageName, caller)
 	} else {
-		videoBytes, err = aiApi.GetT2V(prompt, wait.progress)
+		videoBytes, err = aiApi.GetT2V(prompt, caller)
 	}
 	wait.done()
 
 	if err != nil {
 		log.Println(err)
 		log.Println("Error generating i2v")
-		processVideoGenerationError("")
+		processVideoGenerationError(generationErrorText(err))
 		return
 	}
 
@@ -237,7 +238,7 @@ func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update
 		msgText := text
 
 		if msgText == "" {
-			msgText = "Отмена, сервер подох"
+			msgText = serverDeadText
 		}
 
 		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
@@ -276,12 +277,12 @@ func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update
 		return
 	}
 
-	text, err := aiApi.GetTranscription(mediaBytes, mediaName, wait.progress)
+	text, err := aiApi.GetTranscription(mediaBytes, mediaName, messageCaller(update.Message, wait))
 	wait.done()
 	if err != nil {
 		log.Println(err)
 		log.Println("Error transcribing media")
-		processTranscriptionError("")
+		processTranscriptionError(generationErrorText(err))
 		return
 	}
 
@@ -375,7 +376,7 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if err != nil {
 		log.Println("[error] error summarizing a message")
 		log.Println(err)
-		fail("Отмена, сервер подох")
+		fail(serverDeadText)
 		return
 	}
 

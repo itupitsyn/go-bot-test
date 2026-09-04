@@ -28,6 +28,12 @@ const (
 	// «занят», и тянуть паузу не за чем.
 	summaryWaitText = "Ща, сек"
 
+	// serverDeadText — что-то сломалось на той стороне.
+	serverDeadText = "Отмена, сервер подох"
+	// queueFullText — у человека уже столько задач, сколько сервис берёт
+	// с одного разом. Не поломка, поэтому и слова другие.
+	queueFullText = "Не суетим, очередь подзабилась"
+
 	// waitBeat — пауза между «Ладно» и тем, что за ним. Она тут не
 	// техническая, а комическая, поэтому остаётся, даже когда про очередь
 	// известно сразу.
@@ -223,4 +229,26 @@ func (w *waitMessage) id() int {
 	}
 
 	return w.messageID
+}
+
+// messageCaller — кто просит генерацию в обычном чате и куда сообщать про
+// очередь.
+//
+// From у сообщения бывает пустым (например, пост от имени канала); тогда id не
+// шлём вовсе, и сервис отнесёт задачу к общему анонимному пользователю — это
+// честнее, чем выдавать наш ноль за настоящий id.
+func messageCaller(message *models.Message, wait *waitMessage) aiApi.Caller {
+	caller := aiApi.Caller{Progress: wait.progress}
+	if message != nil && message.From != nil {
+		caller.UserID = message.From.ID
+	}
+
+	return caller
+}
+
+// inlineCaller — то же для нажатия кнопки под inline-результатом. Жмёт не
+// обязательно тот, чья там картинка, поэтому берём именно нажавшего: потолок
+// и круг — про того, кто грузит карту.
+func inlineCaller(userID int64, wait *waitMessage) aiApi.Caller {
+	return aiApi.Caller{UserID: userID, Progress: wait.progress}
 }

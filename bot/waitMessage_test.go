@@ -2,11 +2,14 @@ package bot
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"telebot/aiApi"
 	"testing"
 	"time"
+
+	"github.com/go-telegram/bot/models"
 )
 
 func TestFormatQueueStatus(t *testing.T) {
@@ -264,5 +267,33 @@ func TestInlineWaitMessageWithoutQueue(t *testing.T) {
 		if strings.Contains(text, waitText) {
 			t.Errorf("в inline-сообщение попало %q: %q", waitText, text)
 		}
+	}
+}
+
+func TestGenerationErrorText(t *testing.T) {
+	// Отказ по потолку — не поломка, и говорить про подохший сервер нельзя
+	if got := generationErrorText(fmt.Errorf("t2v: %w", aiApi.ErrQueueFull)); got != queueFullText {
+		t.Errorf("на переполненную очередь получили %q, ждали %q", got, queueFullText)
+	}
+
+	if got := generationErrorText(errors.New("connection refused")); got != serverDeadText {
+		t.Errorf("на поломку получили %q, ждали %q", got, serverDeadText)
+	}
+}
+
+func TestMessageCallerTakesTheSender(t *testing.T) {
+	w, _ := testWaitMessage()
+
+	caller := messageCaller(&models.Message{From: &models.User{ID: 77}}, w)
+	if caller.UserID != 77 {
+		t.Errorf("UserID = %d, ждали 77", caller.UserID)
+	}
+	if caller.Progress == nil {
+		t.Error("колбэк очереди потерялся")
+	}
+
+	// Пост от имени канала: отправителя нет — id не выдумываем
+	if got := messageCaller(&models.Message{}, w).UserID; got != 0 {
+		t.Errorf("без отправителя UserID = %d, ждали 0", got)
 	}
 }

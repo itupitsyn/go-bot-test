@@ -89,9 +89,9 @@ func replaceInlineMedia(ctx context.Context, b *bot.Bot, inlineMessageId string,
 
 // generateInlineImage draws the picture asked for by an inline query and puts it
 // into the message the button was pressed in.
-func generateInlineImage(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData) error {
+func generateInlineImage(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData, userID int64) error {
 	wait := newInlineWaitMessage(ctx, b, inlineMessageId)
-	imageBytes, err := aiApi.GetImage(queryData.query, wait.progress)
+	imageBytes, err := aiApi.GetImage(queryData.query, inlineCaller(userID, wait))
 	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating image: %w", err)
@@ -157,9 +157,9 @@ func putInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, vid
 
 // generateInlineTextVideo animates the words of the inline query, with no
 // picture to start from.
-func generateInlineTextVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData) error {
+func generateInlineTextVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData, userID int64) error {
 	wait := newInlineWaitMessage(ctx, b, inlineMessageId)
-	videoBytes, err := aiApi.GetT2V(queryData.query, wait.progress)
+	videoBytes, err := aiApi.GetT2V(queryData.query, inlineCaller(userID, wait))
 	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating t2v: %w", err)
@@ -170,7 +170,7 @@ func generateInlineTextVideo(ctx context.Context, b *bot.Bot, inlineMessageId st
 
 // generateInlineVideo animates the picture behind the pressed button and puts
 // the result into the message the picture was posted in.
-func generateInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData) error {
+func generateInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData, userID int64) error {
 	imageBytes, imageName, err := downloadTelegramFile(ctx, b, queryData.fileID)
 	if err != nil {
 		// Telegram no longer serves the picture, so it should stop being
@@ -187,7 +187,7 @@ func generateInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string
 	}
 
 	wait := newInlineWaitMessage(ctx, b, inlineMessageId)
-	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imageName, wait.progress)
+	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imageName, inlineCaller(userID, wait))
 	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating i2v: %w", err)
@@ -206,20 +206,27 @@ func processCallbackQuery(ctx context.Context, b *bot.Bot, update *models.Update
 		return
 	}
 
+	// Потолок и круг считаются на того, кто нажал кнопку, — карту грузит он.
+	userID := update.CallbackQuery.From.ID
+
 	var err error
 	switch queryData.kind {
 	case callbackQueryImageVideo:
-		err = generateInlineVideo(ctx, b, inlineMessageId, queryData)
+		err = generateInlineVideo(ctx, b, inlineMessageId, queryData, userID)
 	case callbackQueryTextVideo:
-		err = generateInlineTextVideo(ctx, b, inlineMessageId, queryData)
+		err = generateInlineTextVideo(ctx, b, inlineMessageId, queryData, userID)
 	default:
-		err = generateInlineImage(ctx, b, inlineMessageId, queryData)
+		err = generateInlineImage(ctx, b, inlineMessageId, queryData, userID)
 	}
 
 	if err != nil {
 		log.Println("[error] error processing inline generation")
 		log.Println(err)
-		editInlineStatus(ctx, b, inlineMessageId, "Нет, сервер подох!")
+		text := "Нет, сервер подох!"
+		if errors.Is(err, aiApi.ErrQueueFull) {
+			text = queueFullText
+		}
+		editInlineStatus(ctx, b, inlineMessageId, text)
 	}
 
 	queries.deleteValue(update.CallbackQuery.Data)

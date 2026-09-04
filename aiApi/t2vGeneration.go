@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 )
 
-func getT2VId(prompt string, width, height, fps int) (error, string) {
+func getT2VId(prompt string, width, height, fps int, caller Caller) (error, string) {
 	log.Println("Start getting t2v id")
 
 	escaped, err := json.Marshal(prompt)
@@ -19,7 +18,8 @@ func getT2VId(prompt string, width, height, fps int) (error, string) {
 		return err, ""
 	}
 
-	jsonStr := fmt.Sprintf(`{"prompt": %s, "width": %d, "height": %d, "fps": %d}`, string(escaped), width, height, fps)
+	jsonStr := fmt.Sprintf(`{"prompt": %s, "width": %d, "height": %d, "fps": %d%s}`,
+		string(escaped), width, height, fps, caller.userJSON())
 	url := fmt.Sprintf("%s/api/t2v", os.Getenv("AI_VIDEO_HOST"))
 
 	res, err := submitClient.Post(url, "application/json", bytes.NewReader([]byte(jsonStr)))
@@ -34,8 +34,8 @@ func getT2VId(prompt string, width, height, fps int) (error, string) {
 		return err, ""
 	}
 
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("t2v request failed with status %d: %s", res.StatusCode, string(resBytes)), ""
+	if err := checkSubmitStatus("t2v", res.StatusCode, resBytes); err != nil {
+		return err, ""
 	}
 
 	var jsonRes map[string]any
@@ -52,19 +52,19 @@ func getT2VId(prompt string, width, height, fps int) (error, string) {
 	return nil, id
 }
 
-func generateT2V(prompt string, onProgress ProgressFunc) (error, []byte) {
+func generateT2V(prompt string, caller Caller) (error, []byte) {
 	videoPrompt, err := buildVideoPrompt(prompt)
 	if err != nil {
 		return err, nil
 	}
 	log.Printf("Video prompt: %s\n", videoPrompt)
 
-	err, id := getT2VId(videoPrompt, defaultVideoWidth, defaultVideoHeight, defaultVideoFps)
+	err, id := getT2VId(videoPrompt, defaultVideoWidth, defaultVideoHeight, defaultVideoFps, caller)
 	if err != nil {
 		return err, nil
 	}
 
-	video, err := waitVideoResult(id, onProgress)
+	video, err := waitVideoResult(id, caller.Progress)
 	if err != nil {
 		return err, nil
 	}

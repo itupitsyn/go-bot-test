@@ -54,7 +54,7 @@ func getImageSize(imageBytes []byte) (error, *ImgSize) {
 	}
 }
 
-func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSize, fps int) (error, string) {
+func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSize, fps int, caller Caller) (error, string) {
 	log.Println("Start getting i2v id")
 
 	body := &bytes.Buffer{}
@@ -71,6 +71,11 @@ func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSiz
 	}
 	if err := writer.WriteField("fps", strconv.Itoa(fps)); err != nil {
 		return err, ""
+	}
+	if user := caller.userForm(); user != "" {
+		if err := writer.WriteField("user", user); err != nil {
+			return err, ""
+		}
 	}
 
 	part, err := writer.CreateFormFile("file", imageName)
@@ -103,8 +108,8 @@ func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSiz
 		return err, ""
 	}
 
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("i2v request failed with status %d: %s", res.StatusCode, string(resBytes)), ""
+	if err := checkSubmitStatus("i2v", res.StatusCode, resBytes); err != nil {
+		return err, ""
 	}
 
 	var jsonRes map[string]any
@@ -121,7 +126,7 @@ func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSiz
 	return nil, id
 }
 
-func generateI2V(prompt string, imageBytes []byte, imageName string, onProgress ProgressFunc) (error, []byte) {
+func generateI2V(prompt string, imageBytes []byte, imageName string, caller Caller) (error, []byte) {
 	videoPrompt, err := buildVideoPrompt(prompt)
 	if err != nil {
 		return err, nil
@@ -133,12 +138,12 @@ func generateI2V(prompt string, imageBytes []byte, imageName string, onProgress 
 		return err, nil
 	}
 
-	err, id := getI2VId(videoPrompt, imageBytes, imageName, *imgSize, defaultVideoFps)
+	err, id := getI2VId(videoPrompt, imageBytes, imageName, *imgSize, defaultVideoFps, caller)
 	if err != nil {
 		return err, nil
 	}
 
-	video, err := waitVideoResult(id, onProgress)
+	video, err := waitVideoResult(id, caller.Progress)
 	if err != nil {
 		return err, nil
 	}
