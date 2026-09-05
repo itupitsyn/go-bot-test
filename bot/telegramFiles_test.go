@@ -1,8 +1,11 @@
 package bot
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
+	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
 
@@ -38,6 +41,32 @@ func TestGetTranscribableFileID(t *testing.T) {
 	for _, c := range cases {
 		if got := getTranscribableFileID(c.message); got != c.want {
 			t.Errorf("%s: want %q, got %q", c.name, c.want, got)
+		}
+	}
+}
+
+func TestIsFileTooBig(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			"отказ по размеру",
+			fmt.Errorf("%w, %s", bot.ErrorBadRequest, "Bad Request: file is too big"),
+			true,
+		},
+		{
+			"другой bad request",
+			fmt.Errorf("%w, %s", bot.ErrorBadRequest, "Bad Request: wrong file identifier"),
+			false,
+		},
+		{"поломка сети", errors.New("connection refused"), false},
+	}
+
+	for _, c := range cases {
+		if got := isFileTooBig(c.err); got != c.want {
+			t.Errorf("%s: want %v, got %v", c.name, c.want, got)
 		}
 	}
 }

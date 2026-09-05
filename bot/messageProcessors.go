@@ -3,6 +3,7 @@ package bot
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -273,6 +274,15 @@ func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update
 	if err != nil {
 		log.Println("Error getting media during transcription")
 		log.Println(err)
+
+		// Слишком большой файл — не подохший сервер, а потолок телеги:
+		// врать про сервер тут значит звать человека попробовать ещё раз,
+		// хотя пробовать нечего.
+		if errors.Is(err, ErrFileTooBig) {
+			processTranscriptionError(fileTooBigText)
+			return
+		}
+
 		processTranscriptionError("")
 		return
 	}

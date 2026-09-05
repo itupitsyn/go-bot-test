@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,11 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
+
+// ErrFileTooBig — Telegram отдаёт боту файлы только до 20 МБ, и упирается в
+// это не сервер генерации, а сам мессенджер: длинное видео или mp3 сюда не
+// пролезут никогда, сколько ни повторяй.
+var ErrFileTooBig = errors.New("telegram file is too big to download")
 
 // getBiggestPhoto returns the largest of the sizes Telegram offers for a photo,
 // which is the one worth feeding to the generator.
@@ -79,10 +85,19 @@ func getTranscribableFileID(message *models.Message) string {
 func downloadTelegramFile(ctx context.Context, b *bot.Bot, fileID string) ([]byte, string, error) {
 	file, err := b.GetFile(ctx, &bot.GetFileParams{FileID: fileID})
 	if err != nil {
+		if isFileTooBig(err) {
+			return nil, "", fmt.Errorf("getting file %s: %w: %w", fileID, ErrFileTooBig, err)
+		}
+
 		return nil, "", fmt.Errorf("getting file %s: %w", fileID, err)
 	}
 
-	res, err := http.Get(b.FileDownloadLink(file))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.FileDownloadLink(file), nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("requesting file %s: %w", fileID, err)
+	}
+
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("downloading file %s: %w", fileID, err)
 	}
@@ -98,4 +113,12 @@ func downloadTelegramFile(ctx context.Context, b *bot.Bot, fileID string) ([]byt
 	}
 
 	return fileBytes, filepath.Base(file.FilePath), nil
+}
+
+// isFileTooBig распознаёт отказ по размеру среди прочих Bad Request. Кода
+// ошибки для него у Telegram нет, только текст описания, так что смотрим на
+// него — но лишь внутри Bad Request, чтобы не поймать чужое сообщение.
+func isFileTooBig(err error) bool {
+	return errors.Is(err, bot.ErrorBadRequest) &&
+		strings.Contains(strings.ToLower(err.Error()), "file is too big")
 }
