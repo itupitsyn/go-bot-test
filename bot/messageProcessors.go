@@ -136,6 +136,108 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	utils.ProcessSendMessageError(err, chatId)
 }
 
+// editPhotos собирает картинки для правки: сперва ту, на которую отвечают,
+// потом приложенную к самому сообщению.
+//
+// Порядок не случаен: отвечают обычно на исходник, а прикладывают то, что
+// хотят в него добавить, — и сервис трактует несколько картинок как микс.
+// Telegram кладёт в Photo размеры ОДНОГО снимка, поэтому больше двух отсюда
+// не наберётся.
+func editPhotos(message *models.Message) []*models.PhotoSize {
+	var out []*models.PhotoSize
+
+	if reply := message.ReplyToMessage; reply != nil {
+		if img := getBiggestPhoto(reply.Photo); img != nil {
+			out = append(out, img)
+		}
+	}
+	if img := getBiggestPhoto(message.Photo); img != nil {
+		out = append(out, img)
+	}
+
+	return out
+}
+
+// editHintText — ответ на «нарисуй» при картинке, но без инструкции.
+//
+// Угадывать тут нечего: у правки нет осмысленного умолчания, в отличие от
+// анимации, где картинку можно просто оживить.
+const editHintText = "Напиши, что поправить: «нарисуй ей рыжие волосы», " +
+	"«нарисуй зимнюю улицу вместо фона»."
+
+// processEditHint подсказывает, чего не хватило команде.
+func processEditHint(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatId := update.Message.Chat.ID
+	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:          chatId,
+		Text:            editHintText,
+		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+	})
+	utils.ProcessSendMessageError(err, chatId)
+}
+
+// processImageEdit правит присланные картинки по инструкции. Сюда попадаем,
+// когда к команде «нарисуй» приложена картинка или она адресована картинке.
+func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, photos []*models.PhotoSize) {
+	chatId := update.Message.Chat.ID
+
+	processEditError := func(text string) {
+		wait.done()
+
+		msgText := text
+		if msgText == "" {
+			msgText = serverDeadText
+		}
+
+		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatId,
+			Text:      msgText,
+			MessageID: wait.id(),
+		})
+		utils.ProcessSendMessageError(botError, chatId)
+	}
+
+	images := make([]aiApi.EditImage, 0, len(photos))
+	for _, photo := range photos {
+		imageBytes, imageName, err := downloadTelegramFile(ctx, b, photo.FileID)
+		if err != nil {
+			log.Println("Error getting image during edit")
+			log.Println(err)
+			processEditError("")
+			return
+		}
+		images = append(images, aiApi.EditImage{Bytes: imageBytes, Name: imageName})
+	}
+
+	imageBytes, err := aiApi.GetImageEdit(prompt, images, messageCaller(update.Message, wait))
+	wait.done()
+	if err != nil {
+		log.Println(err)
+		log.Println("[error] error editing image")
+		processEditError(generationErrorText(err))
+		return
+	}
+
+	photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
+	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+		ChatID:    chatId,
+		MessageID: wait.id(),
+	})
+
+	_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
+		ChatID: chatId,
+		Media:  []models.InputMedia{photo},
+		ReplyParameters: &models.ReplyParameters{
+			MessageID: update.Message.ID,
+		},
+	})
+
+	if err != nil {
+		processEditError(serverDeadText)
+	}
+	utils.ProcessSendMessageError(err, chatId)
+}
+
 func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string) {
 	chatId := update.Message.Chat.ID
 
@@ -664,6 +766,12 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"<b>Стили</b>\n" +
 		"Допиши в конце аниме, реалистично, киберпанк или меха — картинка будет в этой стилистике.\n" +
 		"Например: «Нарисуй котика киберпанк».\n\n" +
+		"<b>Правка картинок</b>\n" +
+		"Та же команда, но с картинкой — и бот не нарисует новую, а поправит присланную.\n" +
+		"Ответь «Нарисуй ей рыжие волосы» на сообщение с фото — или отправь фото с такой подписью.\n" +
+		"Пиши, что сделать, а не что нарисовать: «нарисуй зимнюю улицу вместо фона», «нарисуй ему бороду».\n" +
+		"Всё, кроме правки, останется как было — лицо, поза и фон не поедут.\n" +
+		"Если приложить своё фото в ответ на чужое, бот смешает оба: «нарисуй её за этим столом».\n\n" +
 		"<b>Видео</b>\n" +
 		"«Анимируй танцующего котика» — бот сделает видео по описанию.\n" +
 		"Если отправить картинку с подписью «Анимируй ...» или ответить «Анимируй» на сообщение с картинкой, бот оживит именно её.\n\n" +

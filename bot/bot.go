@@ -76,12 +76,30 @@ func getHandler() bot.HandlerFunc {
 
 			msgTextLower := strings.ToLower(getMessageText(update.Message))
 
+			isDraw := isCommand(msgTextLower, "нарисуй", "draw")
 			imgPrompt := ""
-			if isCommand(msgTextLower, "нарисуй", "draw") {
+			if isDraw {
 				imgPrompt = buildAiPrompt(update.Message, "нарисуй", "draw")
 			}
 
-			if imgPrompt != "" {
+			// Та же команда, но с картинкой — это правка, а не генерация с
+			// нуля: «нарисуй ей рыжие волосы» в ответ на фото. Промпт там
+			// значит другое (инструкция, а не описание кадра), поэтому и ручка
+			// другая.
+			editImages := []*models.PhotoSize(nil)
+			if isDraw {
+				editImages = editPhotos(update.Message)
+			}
+
+			if isDraw && len(editImages) > 0 {
+				if imgPrompt == "" {
+					processEditHint(ctx, b, update)
+				} else {
+					log.Println("Image edit requested by", userName)
+					wait := sendWaitMessage(chatId, update.Message.ID)
+					processImageEdit(ctx, b, update, wait, imgPrompt, editImages)
+				}
+			} else if imgPrompt != "" {
 				log.Println("Image generation requested by", userName)
 				wait := sendWaitMessage(chatId, update.Message.ID)
 				processImageGeneration(ctx, b, update, wait, imgPrompt)
