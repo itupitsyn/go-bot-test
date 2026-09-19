@@ -60,6 +60,19 @@ func getHandler() bot.HandlerFunc {
 				return
 			}
 
+			// На профилактике кнопку не трогаем в сервис, а говорим об этом
+			// прямо в сообщении. Правка текста заодно снимает кнопку, так что
+			// и запись под неё больше не нужна.
+			if text, ok := activeMaintenanceText(); ok {
+				log.Println("Inline AI generation refused: maintenance")
+				if err := editInlineStatus(ctx, b, update.CallbackQuery.InlineMessageID, text); err != nil {
+					log.Println("[error] error setting the inline maintenance status")
+					log.Println(err)
+				}
+				queries.deleteValue(update.CallbackQuery.Data)
+				return
+			}
+
 			sendWaitInlineQueryMessage(update.CallbackQuery.InlineMessageID)
 
 			if queryData.kind.isVideo() {
@@ -96,21 +109,29 @@ func getHandler() bot.HandlerFunc {
 					processEditHint(ctx, b, update)
 				} else {
 					log.Println("Image edit requested by", userName)
-					wait := sendWaitMessage(chatId, update.Message.ID)
-					processImageEdit(ctx, b, update, wait, imgPrompt, editImages)
+					if !replyIfMaintenance(ctx, b, update.Message) {
+						wait := sendWaitMessage(chatId, update.Message.ID)
+						processImageEdit(ctx, b, update, wait, imgPrompt, editImages)
+					}
 				}
 			} else if imgPrompt != "" {
 				log.Println("Image generation requested by", userName)
-				wait := sendWaitMessage(chatId, update.Message.ID)
-				processImageGeneration(ctx, b, update, wait, imgPrompt)
+				if !replyIfMaintenance(ctx, b, update.Message) {
+					wait := sendWaitMessage(chatId, update.Message.ID)
+					processImageGeneration(ctx, b, update, wait, imgPrompt)
+				}
 			} else if isCommand(msgTextLower, "анимируй", "animate") {
 				log.Println("Video generation requested by", userName)
-				wait := sendWaitMessage(chatId, update.Message.ID)
-				processVideoGeneration(ctx, b, update, wait, buildAiPrompt(update.Message, "анимируй", "animate"))
+				if !replyIfMaintenance(ctx, b, update.Message) {
+					wait := sendWaitMessage(chatId, update.Message.ID)
+					processVideoGeneration(ctx, b, update, wait, buildAiPrompt(update.Message, "анимируй", "animate"))
+				}
 			} else if isCommand(msgTextLower, "расшифруй", "transcribe") {
 				log.Println("Transcription requested by", userName)
-				wait := sendWaitMessage(chatId, update.Message.ID)
-				processTranscription(ctx, b, update, wait)
+				if !replyIfMaintenance(ctx, b, update.Message) {
+					wait := sendWaitMessage(chatId, update.Message.ID)
+					processTranscription(ctx, b, update, wait)
+				}
 			} else if isBareCommand(msgTextLower, "что тут") || isBareCommand(msgTextLower, "сократи", "summarize", "tldr") {
 				log.Println("Summary requested by", userName)
 				processSummary(ctx, b, update)
