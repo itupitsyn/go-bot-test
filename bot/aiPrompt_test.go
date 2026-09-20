@@ -16,6 +16,12 @@ func TestIsCommand(t *testing.T) {
 		{"нарисуй", true},
 		{"draw", true},
 		{"нарисуй\nкотика", true},
+		// Запятую после команды люди ставят не задумываясь.
+		{"нарисуй, котика", true},
+		{"нарисуй,котика", true},
+		{"нарисуй: котика", true},
+		{"нарисуй!", true},
+		{"draw, a cat", true},
 		{"нарисуйте котика", false},
 		{"drawing board", false},
 		{"а нарисуй котика", false},
@@ -82,6 +88,40 @@ func TestBuildAiPromptUsesCaption(t *testing.T) {
 
 	if got := buildAiPrompt(message, "анимируй", "animate"); got != "танцующим" {
 		t.Errorf("want %q, got %q", "танцующим", got)
+	}
+}
+
+// Знак препинания отделяет команду от промпта, но в сам промпт не попадает.
+func TestBuildAiPromptDropsSeparator(t *testing.T) {
+	cases := []struct {
+		text string
+		want string
+	}{
+		{"Анимируй, котика", "котика"},
+		{"Анимируй,котика", "котика"},
+		{"Анимируй - котика", "котика"},
+		{"Анимируй... котика", "котика"},
+		{"Анимируй", ""},
+	}
+
+	for _, c := range cases {
+		message := &models.Message{Text: c.text}
+		if got := buildAiPrompt(message, "анимируй", "animate"); got != c.want {
+			t.Errorf("buildAiPrompt(%q) = %q, want %q", c.text, got, c.want)
+		}
+	}
+}
+
+// Запятая отделяет команду и от текста сообщения, на которое отвечают.
+func TestBuildAiPromptWithSeparatorAndReply(t *testing.T) {
+	message := &models.Message{
+		Text:           "нарисуй, аниме",
+		ReplyToMessage: &models.Message{Text: "котик на подоконнике"},
+	}
+
+	want := "котик на подоконнике аниме"
+	if got := buildAiPrompt(message, "нарисуй", "draw"); got != want {
+		t.Errorf("want %q, got %q", want, got)
 	}
 }
 

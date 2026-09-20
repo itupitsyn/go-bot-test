@@ -14,9 +14,17 @@ import (
 // sound come from the video template around it.
 const defaultAnimationPrompt = "the scene in the picture comes to life"
 
+// isCommandSeparator reports whether the rune ends the keyword. Пробелом дело
+// не ограничивается: «анимируй, котика» и «нарисуй: котика» — такие же
+// команды, люди пишут их через запятую или двоеточие не задумываясь.
+func isCommandSeparator(r rune) bool {
+	return unicode.IsSpace(r) || unicode.IsPunct(r) || unicode.IsSymbol(r)
+}
+
 // isCommand reports whether the already lowercased text starts with one of the
 // keywords used as a standalone word: the keyword is either the whole text or
-// is followed by a space.
+// is followed by a space or a punctuation mark. Буква следом — уже другое
+// слово: «нарисуйте» командой не считается.
 func isCommand(text string, keywords ...string) bool {
 	for _, keyword := range keywords {
 		rest, ok := strings.CutPrefix(text, keyword)
@@ -26,7 +34,7 @@ func isCommand(text string, keywords ...string) bool {
 		if rest == "" {
 			return true
 		}
-		if r, _ := utf8.DecodeRuneInString(rest); unicode.IsSpace(r) {
+		if r, _ := utf8.DecodeRuneInString(rest); isCommandSeparator(r) {
 			return true
 		}
 	}
@@ -54,6 +62,9 @@ func buildAiPrompt(message *models.Message, keywords ...string) string {
 	for _, keyword := range keywords {
 		prompt = utils.TrimPrefixIgnoreCase(prompt, keyword)
 	}
+	// Отделявший промпт знак препинания в него самом не нужен: из
+	// «анимируй, котика» сервису должно уехать «котика», а не «, котика».
+	prompt = strings.TrimLeftFunc(prompt, isCommandSeparator)
 	prompt = strings.TrimSpace(prompt)
 
 	if reply := message.ReplyToMessage; reply != nil {
