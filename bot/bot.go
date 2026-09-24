@@ -217,6 +217,13 @@ func New(ctx context.Context) *bot.Bot {
 		bot.WithAllowedUpdates([]string{"callback_query", "message", "inline_query"}),
 	}
 
+	// Свой telegram-bot-api в режиме --local отдаёт файлы до 2 ГБ вместо
+	// 20 МБ у облачного — без этого длинное видео не расшифровать. Не задан —
+	// ходим в облако, как раньше.
+	if serverURL := strings.TrimSuffix(os.Getenv("TELEGRAM_API_URL"), "/"); serverURL != "" {
+		opts = append(opts, bot.WithServerURL(serverURL))
+	}
+
 	b, err := bot.New(os.Getenv("TELEGRAM_APITOKEN"), opts...)
 	if err != nil {
 		panic(err)

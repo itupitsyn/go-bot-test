@@ -13,9 +13,10 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
-// ErrFileTooBig — Telegram отдаёт боту файлы только до 20 МБ, и упирается в
-// это не сервер генерации, а сам мессенджер: длинное видео или mp3 сюда не
-// пролезут никогда, сколько ни повторяй.
+// ErrFileTooBig — Telegram отдаёт боту файлы только до 20 МБ (свой bot-api с
+// --local — до 2 ГБ, см. TELEGRAM_API_URL), и упирается в это не сервер
+// генерации, а сам мессенджер: такой файл не пролезет никогда, сколько ни
+// повторяй.
 var ErrFileTooBig = errors.New("telegram file is too big to download")
 
 // getBiggestPhoto returns the largest of the sizes Telegram offers for a photo,
