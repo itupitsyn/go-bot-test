@@ -7,16 +7,25 @@ import (
 
 const (
 	// The frame is vertical: clips are watched on phones, where a horizontal
-	// one took up a strip in the middle of the screen. The short side of 768 is
-	// the model's native resolution: below it loses detail, above it just takes
-	// longer.
+	// one took up a strip in the middle of the screen.
 	//
-	// The sides are multiples of 32: the service rounds the size down to a
-	// multiple and would silently return something other than what was asked.
-	// An exact 9:16 with a short side of 768 is not divisible by 32, so the
-	// long side is 1344, a bit shorter than nine to sixteen.
-	defaultVideoWidth  = 768
-	defaultVideoHeight = 1344
+	// The sides must be multiples of 32 -- the service rounds down and would
+	// silently return something other than what was asked. 576x1024 satisfies
+	// that and is an exact 9:16, so nothing is cropped on a phone.
+	//
+	// Was 768x1344 until 24.09.2026. Generation time grows roughly as pixels
+	// to the power of 1.3, and that canvas cost six minutes a clip:
+	//
+	//     768x1344  1032k px  351 s
+	//     576x1024   589k px  161 s
+	//     512x896    458k px  105 s
+	//
+	// (measured back to back on one card, 8 steps, MiniMax H3). Every t2v the
+	// bot had ever sent ran 378-415 s; the faster numbers in the service log
+	// are bench runs at 832x480, not real traffic. 512x896 is the next step
+	// down if 161 s is still too slow; its picture quality was not compared.
+	defaultVideoWidth  = 576
+	defaultVideoHeight = 1024
 	defaultVideoFps    = 24
 
 	videoPollInterval = 10 * time.Second
