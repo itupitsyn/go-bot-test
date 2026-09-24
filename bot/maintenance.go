@@ -12,10 +12,11 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
-// maintenanceText — ответ на AI-команду во время профилактики.
+// maintenanceText is the answer to an AI command during maintenance.
 //
-// Время пишем в UTC, как и всё остальное в боте: розыгрыш в /help тоже
-// объявлен по UTC, и держать в голове два пояса незачем.
+// Time is written in UTC like everything else in the bot: the raffle in /help
+// is announced in UTC too, and there is no point keeping two time zones in
+// mind.
 func maintenanceText(maintenance *model.AiMaintenance, now time.Time) string {
 	const prefix = "Нейронки на профилактике"
 
@@ -42,9 +43,10 @@ func sameDate(a, b time.Time) bool {
 	return ay == by && am == bm && ad == bd
 }
 
-// activeMaintenanceText говорит, идёт ли сейчас профилактика, и что тогда
-// ответить. Если базу спросить не вышло, считаем, что профилактики нет:
-// лучше попробовать сходить в сервис, чем выключить нейронки из-за сбоя.
+// activeMaintenanceText says whether maintenance is going on right now and what
+// to answer then. If the database can't be queried, we assume there is no
+// maintenance: better to try the service than to switch the neural nets off
+// over a glitch.
 func activeMaintenanceText() (string, bool) {
 	maintenance, err := model.GetAiMaintenance()
 	if err != nil {
@@ -61,8 +63,9 @@ func activeMaintenanceText() (string, bool) {
 	return maintenanceText(maintenance, now), true
 }
 
-// replyIfMaintenance отвечает на AI-команду, что нейронки на профилактике.
-// Вернёт true, если так и есть и команду дальше вести не нужно.
+// replyIfMaintenance answers an AI command saying the neural nets are under
+// maintenance. It returns true if that is the case and the command should go no
+// further.
 func replyIfMaintenance(ctx context.Context, b *bot.Bot, message *models.Message) bool {
 	text, ok := activeMaintenanceText()
 	if !ok {

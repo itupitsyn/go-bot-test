@@ -26,24 +26,26 @@ var cyberpunkSuffixRu = " киберпанк"
 var mehaSuffix = " meha"
 var mehaSuffixRu = " меха"
 
-// Шаблоны стилей.
+// Style templates.
 //
-// Прежние были пресетами Fooocus и писались под SDXL с CFG 5-7, где набивка
-// «качественными» токенами (masterpiece, 8k, highly detailed) работала как
-// рычаг: она растаскивала условный прогноз с безусловным. Сейчас картинки
-// рисует Z-Image Turbo с guidance_scale=0.0 — безусловной ветки нет вовсе,
-// растаскивать нечего, и такие слова превращаются в обычные токены описания,
-// которые разбавляют собой то, что человек реально попросил.
+// The previous ones were Fooocus presets written for SDXL with CFG 5-7, where
+// padding with "quality" tokens (masterpiece, 8k, highly detailed) worked as a
+// lever: it pushed the conditional prediction away from the unconditional one.
+// Now images are drawn by Z-Image Turbo with guidance_scale=0.0: there is no
+// unconditional branch at all, nothing to push apart, and such words turn into
+// ordinary description tokens that dilute what the person actually asked for.
 //
-// Плюс у Z-Image текстовый энкодер на базе LLM: связную фразу он читает
-// заметно лучше, чем список через запятую. Отсюда шаблоны предложениями.
+// On top of that, Z-Image has an LLM-based text encoder: it reads a coherent
+// sentence noticeably better than a comma-separated list. Hence templates
+// written as sentences.
 func getImageTemplate(msgText string) string {
 	animeMeassageTemplate := "%s. Japanese anime key visual, clean cel shading, vivid saturated colours, expressive linework."
 	realisticMessageTemplate := "%s. Shot on 35mm film in natural daylight, shallow depth of field, realistic skin texture with visible pores, fine grain."
-	// Якорь на игру здесь несёт основную нагрузку. Без него — с одним лишь
-	// описанием освещения — Z-Image рисует обычную ночную улицу с вывесками,
-	// подсвеченными изнутри, а не неон. В прежнем fooocus-шаблоне ту же роль
-	// играл хвост «reminiscent of cyberpunk genre video games».
+	// The anchor on games carries most of the load here. Without it, with only
+	// the lighting description, Z-Image draws an ordinary night street with
+	// signs lit from within rather than neon. In the old fooocus template the
+	// same role was played by the "reminiscent of cyberpunk genre video games"
+	// tail.
 	cyberpunkMessageTemplate := "%s. In the style of the Cyberpunk 2077 video game, Night City after dark: " +
 		"glowing neon tube signs and holographic billboards in magenta, cyan and electric blue, " +
 		"dense stacked signage crowding the street, volumetric haze, rain-slick asphalt " +
@@ -107,7 +109,8 @@ func generateImage(msgText string, caller Caller) ([]byte, error) {
 	return requestImage(enhancedPrompt, caller)
 }
 
-// requestImage отправляет уже собранный промпт и ждёт готовую картинку.
+// requestImage sends an already assembled prompt and waits for the finished
+// image.
 func requestImage(prompt string, caller Caller) ([]byte, error) {
 	escapedPrompt, err := json.Marshal(prompt)
 	if err != nil {

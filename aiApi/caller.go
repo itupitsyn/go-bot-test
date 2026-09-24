@@ -5,28 +5,28 @@ import (
 	"strconv"
 )
 
-// ErrQueueFull — сервис отказался брать задачу: у этого человека их уже
-// столько, сколько он может держать в работе одновременно. Это не поломка,
-// а нормальный ответ, и наверху его надо отличать от «сервер подох».
+// ErrQueueFull means the service refused the job: this person already has as
+// many jobs in progress as it allows at once. It is not a failure but a normal
+// answer, and the upper layers must tell it apart from "сервер подох".
 var ErrQueueFull = errors.New("the user has too many jobs in flight")
 
-// Caller — кто просит и куда сообщать о ходе дела.
+// Caller is who is asking and where to report progress.
 //
-// Ездит вместе через всю генерацию, потому что и то и другое нужно на всём её
-// протяжении: по id сервис считает потолок задач и строит круг обслуживания,
-// а колбэк ведёт сообщение ожидания.
+// The two travel together through the whole generation because both are needed
+// all along: the service counts the job cap and builds the round-robin by the
+// id, and the callback drives the wait message.
 type Caller struct {
-	// UserID — id пользователя Telegram. Ноль означает «не знаем»: такие
-	// задачи сервис относит к общему анонимному пользователю.
+	// UserID is the Telegram user id. Zero means "unknown": the service files
+	// such jobs under a shared anonymous user.
 	UserID int64
-	// Progress получает место задачи в очереди на каждом опросе; nil — не
-	// отслеживать очередь.
+	// Progress receives the job's place in the queue on every poll; nil means
+	// the queue is not tracked.
 	Progress ProgressFunc
 }
 
-// userJSON — владелец для json-тела запроса, вместе с ведущей запятой. Пустая
-// строка, если владелец неизвестен: пусть сервис сам решает, что делать с
-// безымянной задачей, а не получает наш ноль как настоящий id.
+// userJSON is the owner for a json request body, leading comma included. It is
+// an empty string when the owner is unknown: let the service decide what to do
+// with a nameless job rather than receive our zero as a real id.
 func (c Caller) userJSON() string {
 	if c.UserID == 0 {
 		return ""
@@ -35,7 +35,8 @@ func (c Caller) userJSON() string {
 	return `, "user": ` + strconv.FormatInt(c.UserID, 10)
 }
 
-// userForm — владелец для multipart-запроса. Пустая строка — поле не слать.
+// userForm is the owner for a multipart request. An empty string means the
+// field is not sent.
 func (c Caller) userForm() string {
 	if c.UserID == 0 {
 		return ""

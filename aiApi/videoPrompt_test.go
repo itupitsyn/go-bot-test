@@ -37,8 +37,8 @@ func TestGetVideoTemplateFallsBackToDefault(t *testing.T) {
 }
 
 func TestEveryVideoTemplateMentionsSound(t *testing.T) {
-	// H3 генерит стерео в том же проходе, поэтому дорожка окажется в mp4
-	// независимо от нас — про неё должен говорить каждый шаблон.
+	// H3 generates stereo in the same pass, so the track ends up in the mp4
+	// regardless of us: every template must talk about it.
 	if !strings.Contains(defaultVideoTemplate, "sound") {
 		t.Errorf("the default template says nothing about sound: %q", defaultVideoTemplate)
 	}
@@ -75,8 +75,8 @@ func TestGetVideoPrompt(t *testing.T) {
 		{"Кота СВЕРХУ", "кота"},
 		{"кота", "кота"},
 		{"", ""},
-		// Ключевое слово отделяется пробелом, поэтому слово, которое просто
-		// заканчивается на него, целым и остаётся.
+		// The keyword is separated by a space, so a word that merely ends with
+		// it stays whole.
 		{"кота наживо", "кота наживо"},
 		{"кота вокруг вокруг", "кота вокруг"},
 	}
@@ -89,8 +89,8 @@ func TestGetVideoPrompt(t *testing.T) {
 }
 
 func TestGetVideoPromptLeavesNothingWhenOnlyKeyword(t *testing.T) {
-	// Осталась одна пустота — вызывающий обязан подставить дефолтный субъект,
-	// иначе в модель уедет голый шаблон.
+	// Only emptiness is left: the caller must substitute the default subject,
+	// otherwise a bare template goes to the model.
 	if res := getVideoPrompt("медленно"); res != "медленно" {
 		t.Errorf("одинокое слово без пробела перед ним ключевым не считается, got %q", res)
 	}

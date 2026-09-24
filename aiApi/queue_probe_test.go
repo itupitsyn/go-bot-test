@@ -9,14 +9,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Живая проверка разбора /api/queue: ставит три картинки разом и смотрит, что
-// getQueueStatus видит по каждой. Ничего не утверждает про числа сервиса —
-// проверяет, что мы вообще находим свою задачу в реальном ответе.
+// A live check of /api/queue parsing: it submits three images at once and looks
+// at what getQueueStatus sees for each. It asserts nothing about the service
+// numbers; it checks that we find our job in a real response at all.
 //
 //	AI_QUEUE_PROBE=1 go test ./aiApi/ -run TestQueueProbe -v -timeout 10m
 //
-// Хост берётся из AI_PAINTER_HOST — как и соседние пробники, подхватываем
-// его из ../.env.local, если в окружении не задан.
+// The host comes from AI_PAINTER_HOST; like the neighbouring probes, it is
+// picked up from ../.env.local if not set in the environment.
 func TestQueueProbe(t *testing.T) {
 	if os.Getenv("AI_QUEUE_PROBE") == "" {
 		t.Skip("AI_QUEUE_PROBE не задан")

@@ -9,19 +9,19 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Пробник, а не тест: ходит в живую llm и печатает, что она решила. Ничего не
-// утверждает — смотреть глазами. Запуск:
+// A probe, not a test: it goes to the live llm and prints what it decided. It
+// asserts nothing; look by eye. Run:
 //
 //	AI_PROMPT_PROBE=1 go test ./aiApi/ -run TestPromptDecisionProbe -v -timeout 20m
 //
-// Вопрос, на который он отвечает: если попросить модель саму решать, дополнять
-// промпт или оставить как есть, — насколько одинаково она решает это на одном и
-// том же входе.
+// The question it answers: if the model is asked to decide by itself whether to
+// expand the prompt or leave it as is, how consistently does it decide on the
+// same input.
 
-// Кандидаты в системные промпты. Второй отличается тем, что ветка «оставить»
-// стоит первой и подана как действие по умолчанию: гипотеза в том, что на
-// англоязычном подробном промпте модели просто нечего делать, кроме как
-// дополнять, и инструкция «дополни» остаётся единственной живой.
+// Candidate system prompts. The second one differs in that the "leave it"
+// branch comes first and is presented as the default action: the hypothesis is
+// that on a detailed English prompt the model simply has nothing to do but
+// expand, and the "expand" instruction remains the only live one.
 var probeSystemPrompts = []struct {
 	name   string
 	prompt string
@@ -47,19 +47,21 @@ var probeSystemPrompts = []struct {
 
 const probeRepeats = 5
 
-// expansionThreshold — во сколько раз ответ должен быть длиннее чистого
-// перевода того же промпта, чтобы считать, что модель решила дополнять.
+// expansionThreshold is how many times longer than a plain translation of the
+// same prompt the answer must be to count as the model deciding to expand.
 //
-// Сравнивать с длиной входа нельзя: перевод с русского на английский сам по
-// себе прибавляет четверть слов на одни артикли, и подробный русский промпт
-// выглядел бы «дополненным», хотя модель его честно перевела слово в слово.
+// Comparing with the input length won't do: translating from Russian to English
+// adds a quarter more words on articles alone, and a detailed Russian prompt
+// would look "expanded" even though the model honestly translated it word for
+// word.
 const expansionThreshold = 1.5
 
-// baselineRuns — сколько раз меряем чистый перевод, чтобы взять медиану: одна
-// точка отсчёта сама по себе шумная.
+// baselineRuns is how many times the plain translation is measured to take the
+// median: a single reference point is noisy on its own.
 const baselineRuns = 3
 
-// translationBaseline возвращает медианную длину чистого перевода в словах.
+// translationBaseline returns the median length of a plain translation in
+// words.
 func translationBaseline(t *testing.T, text string) int {
 	t.Helper()
 
@@ -82,14 +84,14 @@ func translationBaseline(t *testing.T, text string) int {
 }
 
 func TestPromptDecisionProbe(t *testing.T) {
-	// Пробник занимает карту на минуту, поэтому в обычный go test ./... он не
-	// лезет — только по явному флагу.
+	// The probe occupies the GPU for a minute, so it stays out of a regular go
+	// test ./... and runs only with an explicit flag.
 	if os.Getenv("AI_PROMPT_PROBE") == "" {
 		t.Skip("пробник выключен; запуск: AI_PROMPT_PROBE=1 go test ./aiApi/ -run TestPromptDecisionProbe -v -timeout 20m")
 	}
 
 	if os.Getenv("AI_LLM_URL") == "" {
-		// Тесты запускаются не из корня, где лежит .env.local.
+		// Tests run not from the root, where .env.local lives.
 		_ = godotenv.Load("../.env.local")
 	}
 	if os.Getenv("AI_LLM_URL") == "" {
@@ -99,7 +101,7 @@ func TestPromptDecisionProbe(t *testing.T) {
 	cases := []struct {
 		name string
 		text string
-		want string // чего мы ждём от разумного решения
+		want string // what we expect from a sensible decision
 	}{
 		{"одно слово", "кот", "дополнить"},
 		{"одно слово по-английски", "cat", "дополнить"},

@@ -19,7 +19,7 @@ func TestMaintenanceText(t *testing.T) {
 		{"today", at(time.Date(2026, 9, 16, 18, 30, 0, 0, time.UTC)), "Нейронки на профилактике, вернёмся сегодня в 18:30 UTC"},
 		{"tomorrow", at(time.Date(2026, 9, 17, 9, 0, 0, 0, time.UTC)), "Нейронки на профилактике, вернёмся завтра в 09:00 UTC"},
 		{"later", at(time.Date(2026, 9, 20, 9, 0, 0, 0, time.UTC)), "Нейронки на профилактике, вернёмся 20.09 в 09:00 UTC"},
-		// Срок, заданный в другом поясе, всё равно называем по UTC.
+		// A deadline set in another time zone is still stated in UTC.
 		{"other zone", at(time.Date(2026, 9, 17, 1, 0, 0, 0, time.FixedZone("MSK", 3*60*60))), "Нейронки на профилактике, вернёмся сегодня в 22:00 UTC"},
 	}
 

@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// parseTranscription собирает результат из json, чтобы тесты говорили на том же
-// языке, что и сервис.
+// parseTranscription builds a result from json so the tests speak the same
+// language as the service.
 func parseTranscription(t *testing.T, raw string) transcriptionResult {
 	t.Helper()
 
@@ -19,8 +19,8 @@ func parseTranscription(t *testing.T, raw string) transcriptionResult {
 }
 
 func TestFormatTranscriptionSingleSpeakerHasNoLabels(t *testing.T) {
-	// whisperx отдаёт текст сегмента с ведущим пробелом, и режет речь на
-	// куски чаще, чем человек делает паузы.
+	// whisperx returns segment text with a leading space and cuts speech into
+	// pieces more often than a person pauses.
 	result := parseTranscription(t, `{"segments":[
 		{"text":" Привет.","speaker":"SPEAKER_00"},
 		{"text":" Как дела?","speaker":"SPEAKER_00"}
@@ -50,7 +50,7 @@ func TestFormatTranscriptionLabelsSeveralSpeakers(t *testing.T) {
 }
 
 func TestFormatTranscriptionWithoutSpeakers(t *testing.T) {
-	// Диаризация могла не проставить говорящих вовсе — тогда это просто текст.
+	// Diarization may not have assigned speakers at all; then it is just text.
 	result := parseTranscription(t, `{"segments":[
 		{"text":" Раз."},
 		{"text":" Два."}

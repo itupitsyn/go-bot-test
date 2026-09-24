@@ -1,7 +1,8 @@
 package aiApi
 
-// caller у генерации — кто просит (id для потолка и круга на сервисе) и куда
-// сообщать о месте в очереди. Отказ по потолку приходит как ErrQueueFull.
+// The caller of a generation says who is asking (the id the service uses for
+// the per-user cap and the round-robin) and where to report the place in the
+// queue. A refusal over the cap comes back as ErrQueueFull.
 func GetImage(msgText string, caller Caller) ([]byte, error) {
 	imageData, err := generateImage(msgText, caller)
 	if err != nil {
@@ -11,9 +12,9 @@ func GetImage(msgText string, caller Caller) ([]byte, error) {
 	return imageData, nil
 }
 
-// GetImageEdit правит присланные картинки по инструкции. Одна картинка —
-// правка, несколько — микс. Промпт здесь именно инструкция («сделай волосы
-// рыжими»), а не описание желаемого кадра, как в GetImage.
+// GetImageEdit edits the given images following an instruction. One image means
+// an edit, several mean a mix. The prompt here is an instruction ("make her
+// hair red"), not a description of the desired frame as in GetImage.
 func GetImageEdit(msgText string, images []EditImage, caller Caller) ([]byte, error) {
 	return generateImageEdit(msgText, images, caller)
 }
@@ -32,8 +33,8 @@ func GetTranscription(mediaBytes []byte, mediaName string, caller Caller) (strin
 	return generateTranscription(mediaBytes, mediaName, caller)
 }
 
-// GetSummary пересказывает текст. languageCode — тег IETF из профиля Telegram,
-// может быть пустым.
+// GetSummary retells a text. languageCode is the IETF tag from the Telegram
+// profile and may be empty.
 func GetSummary(text, languageCode string) (string, error) {
 	return generateSummary(text, languageCode)
 }

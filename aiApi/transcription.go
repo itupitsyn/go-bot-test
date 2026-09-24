@@ -19,16 +19,17 @@ const (
 	transcriptionMaxWait      = time.Hour
 )
 
-// getTranscriptionId отправляет файл на распознавание и возвращает id задачи.
+// getTranscriptionId sends a file for recognition and returns the job id.
 func getTranscriptionId(mediaBytes []byte, mediaName string, caller Caller) (string, error) {
 	log.Println("Start getting transcription id")
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// Поля — строго до файла: WriteField создаёт новую часть и тем самым
-	// закрывает предыдущую, после чего io.Copy в неё падает с
-	// "multipart: can't write to finished part". Порядок как в i2vGeneration.go.
+	// The fields go strictly before the file: WriteField creates a new part and
+	// thereby closes the previous one, after which io.Copy into it fails with
+	// "multipart: can't write to finished part". Same order as in
+	// i2vGeneration.go.
 	if user := caller.userForm(); user != "" {
 		if err := writer.WriteField("user", user); err != nil {
 			return "", err
@@ -82,9 +83,9 @@ func getTranscriptionId(mediaBytes []byte, mediaName string, caller Caller) (str
 	return id, nil
 }
 
-// transcriptionResult — то, что whisperx возвращает после выравнивания и
-// диаризации. Полей там больше (тайминги, разбивка по словам), но боту нужны
-// только текст и кто его произнёс.
+// transcriptionResult is what whisperx returns after alignment and diarization.
+// There are more fields (timings, per-word splits), but the bot only needs the
+// text and who said it.
 type transcriptionResult struct {
 	Segments []struct {
 		Text    string `json:"text"`
@@ -93,9 +94,9 @@ type transcriptionResult struct {
 	Language string `json:"language"`
 }
 
-// formatTranscription склеивает сегменты в текст. Подряд идущие реплики одного
-// человека сливаются в абзац, а подписи появляются, только если сервис
-// расслышал больше одного говорящего: на обычном голосовом они были бы шумом.
+// formatTranscription glues segments into text. Consecutive lines of one person
+// merge into a paragraph, and speaker labels appear only if the service heard
+// more than one speaker: on a regular voice message they would be noise.
 func formatTranscription(result transcriptionResult) string {
 	speakers := make(map[string]int)
 	for _, segment := range result.Segments {
@@ -115,8 +116,8 @@ func formatTranscription(result transcriptionResult) string {
 			continue
 		}
 
-		// Первый сегмент открывает первый абзац, дальше абзац начинается со
-		// сменой говорящего.
+		// The first segment opens the first paragraph; after that a paragraph
+		// starts when the speaker changes.
 		startsBlock := len(speakers) > 1 && (i == 0 || segment.Speaker != previousSpeaker)
 
 		if text.Len() > 0 {

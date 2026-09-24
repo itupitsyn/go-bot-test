@@ -13,10 +13,10 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
-// ErrFileTooBig — Telegram отдаёт боту файлы только до 20 МБ (свой bot-api с
-// --local — до 2 ГБ, см. TELEGRAM_API_URL), и упирается в это не сервер
-// генерации, а сам мессенджер: такой файл не пролезет никогда, сколько ни
-// повторяй.
+// ErrFileTooBig: Telegram serves bots files only up to 20 MB (our own bot-api
+// with --local, up to 2 GB, see TELEGRAM_API_URL), and the limit is not the
+// generation server but the messenger itself: such a file will never get
+// through, however many times you retry.
 var ErrFileTooBig = errors.New("telegram file is too big to download")
 
 // getBiggestPhoto returns the largest of the sizes Telegram offers for a photo,
@@ -116,9 +116,9 @@ func downloadTelegramFile(ctx context.Context, b *bot.Bot, fileID string) ([]byt
 	return fileBytes, filepath.Base(file.FilePath), nil
 }
 
-// isFileTooBig распознаёт отказ по размеру среди прочих Bad Request. Кода
-// ошибки для него у Telegram нет, только текст описания, так что смотрим на
-// него — но лишь внутри Bad Request, чтобы не поймать чужое сообщение.
+// isFileTooBig recognizes the size refusal among other Bad Requests. Telegram
+// has no error code for it, only the description text, so we look at that, but
+// only within Bad Request so as not to catch someone else's message.
 func isFileTooBig(err error) bool {
 	return errors.Is(err, bot.ErrorBadRequest) &&
 		strings.Contains(strings.ToLower(err.Error()), "file is too big")

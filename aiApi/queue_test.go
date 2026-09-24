@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// queueServer поднимает заглушку /api/queue с готовым телом ответа.
+// queueServer starts a stub /api/queue with a canned response body.
 func queueServer(t *testing.T, body string) string {
 	t.Helper()
 
@@ -36,7 +36,8 @@ func TestGetQueueStatusRunning(t *testing.T) {
 }
 
 func TestGetQueueStatusCountsAhead(t *testing.T) {
-	// Считается чужое видео (12 с из ~100), перед нами ещё видео и картинка.
+	// Someone else's video is running (12 s of ~100), with another video and an
+	// image ahead of us.
 	host := queueServer(t, `{
 		"running": {"id": "other", "type": "i2v", "elapsed": 12.0},
 		"pending": [
@@ -56,7 +57,7 @@ func TestGetQueueStatusCountsAhead(t *testing.T) {
 	if status.Running {
 		t.Error("наша задача ещё ждёт, а помечена как считающаяся")
 	}
-	// Двое в очереди перед нами плюс та, что уже считается.
+	// Two queued ahead of us plus the one already running.
 	if status.Ahead != 3 {
 		t.Errorf("впереди %d задач, ждали 3", status.Ahead)
 	}
@@ -67,8 +68,8 @@ func TestGetQueueStatusCountsAhead(t *testing.T) {
 	}
 }
 
-// Свободная карта берёт задачу не мгновенно: в этот зазор задача уже в
-// очереди, а впереди никого — очереди нет.
+// A free GPU does not pick up a job instantly: in that gap the job is already
+// queued, but nobody is ahead, so there is no queue.
 func TestGetQueueStatusEmptyQueue(t *testing.T) {
 	host := queueServer(t, `{"running": null, "pending": [{"id": "our", "type": "img_gen"}]}`)
 
@@ -84,8 +85,8 @@ func TestGetQueueStatusEmptyQueue(t *testing.T) {
 	}
 }
 
-// Задача уже досчиталась (её нет ни на счёте, ни в очереди) — это не ошибка,
-// просто показывать нечего.
+// The job has already finished (it is neither running nor queued): not an
+// error, just nothing to show.
 func TestGetQueueStatusUnknownJob(t *testing.T) {
 	host := queueServer(t, `{"running": null, "pending": []}`)
 
@@ -98,7 +99,7 @@ func TestGetQueueStatusUnknownJob(t *testing.T) {
 	}
 }
 
-// Затянувшаяся задача не должна давать отрицательный остаток.
+// An overrunning job must not yield a negative remainder.
 func TestGetQueueStatusOverdueRunningJob(t *testing.T) {
 	host := queueServer(t, `{
 		"running": {"id": "other", "type": "t2v", "elapsed": 900.0},
@@ -115,7 +116,8 @@ func TestGetQueueStatusOverdueRunningJob(t *testing.T) {
 	if status.ETA != 0 {
 		t.Errorf("ETA %s, ждали 0", status.ETA)
 	}
-	// Затянувшаяся задача всё ещё впереди нас, даже когда оценка исчерпана.
+	// An overrunning job is still ahead of us even when its estimate is used
+	// up.
 	if status.Ahead != 1 {
 		t.Errorf("впереди %d задач, ждали 1", status.Ahead)
 	}

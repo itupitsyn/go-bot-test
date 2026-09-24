@@ -13,25 +13,26 @@ import (
 	"strings"
 )
 
-// EditImage — картинка, уезжающая на правку: байты и имя файла для multipart.
+// EditImage is an image sent for editing: the bytes and the file name for
+// multipart.
 type EditImage struct {
 	Bytes []byte
 	Name  string
 }
 
-// editMaxImages — столько же, сколько принимает сервис. Держим проверку и
-// здесь, чтобы не гонять мегабайты ради заведомого 400.
+// editMaxImages is as many as the service accepts. The check is kept here too
+// so as not to push megabytes around for a guaranteed 400.
 const editMaxImages = 3
 
-// getEditInstruction готовит текст для /api/edit.
+// getEditInstruction prepares the text for /api/edit.
 //
-// В отличие от txt2img тут НЕ надо срезать хвосты стилей: «сделай её аниме» —
-// это законная инструкция, а не пожелание к рендеру. Срезаем только само
-// ключевое слово команды.
+// Unlike txt2img, the style suffixes must NOT be cut off here: "сделай её
+// аниме" is a legitimate instruction, not a rendering wish. Only the command
+// keyword itself is cut.
 //
-// Переводим на английский по той же причине, что и промпты генерации: у
-// Qwen2.5-VL, который читает инструкцию и картинку, русский заметно слабее
-// английского.
+// It is translated to English for the same reason as generation prompts:
+// Qwen2.5-VL, which reads the instruction and the image, is noticeably weaker
+// in Russian than in English.
 func getEditInstruction(msgText string) (string, error) {
 	text := strings.TrimSpace(msgText)
 	for _, keyword := range []string{"нарисуй ", "draw "} {
@@ -61,9 +62,9 @@ func getEditId(prompt string, images []EditImage, caller Caller) (string, error)
 		}
 	}
 
-	// Поле называется files и повторяется: сервис принимает список и трактует
-	// несколько картинок как микс — «возьми женщину со второй и посади за стол
-	// с первой».
+	// The field is called files and is repeated: the service accepts a list and
+	// treats several images as a mix, as in "take the woman from the second one
+	// and seat her at the table from the first".
 	for _, img := range images {
 		part, err := writer.CreateFormFile("files", img.Name)
 		if err != nil {

@@ -14,17 +14,17 @@ import (
 // sound come from the video template around it.
 const defaultAnimationPrompt = "the scene in the picture comes to life"
 
-// isCommandSeparator reports whether the rune ends the keyword. Пробелом дело
-// не ограничивается: «анимируй, котика» и «нарисуй: котика» — такие же
-// команды, люди пишут их через запятую или двоеточие не задумываясь.
+// isCommandSeparator reports whether the rune ends the keyword. It is not just
+// a space: "анимируй, котика" and "нарисуй: котика" are commands too, people
+// type them with a comma or a colon without thinking.
 func isCommandSeparator(r rune) bool {
 	return unicode.IsSpace(r) || unicode.IsPunct(r) || unicode.IsSymbol(r)
 }
 
 // isCommand reports whether the already lowercased text starts with one of the
 // keywords used as a standalone word: the keyword is either the whole text or
-// is followed by a space or a punctuation mark. Буква следом — уже другое
-// слово: «нарисуйте» командой не считается.
+// is followed by a space or a punctuation mark. A letter right after it makes
+// it a different word: "нарисуйте" does not count as a command.
 func isCommand(text string, keywords ...string) bool {
 	for _, keyword := range keywords {
 		rest, ok := strings.CutPrefix(text, keyword)
@@ -62,8 +62,9 @@ func buildAiPrompt(message *models.Message, keywords ...string) string {
 	for _, keyword := range keywords {
 		prompt = utils.TrimPrefixIgnoreCase(prompt, keyword)
 	}
-	// Отделявший промпт знак препинания в него самом не нужен: из
-	// «анимируй, котика» сервису должно уехать «котика», а не «, котика».
+	// The punctuation mark that separated the prompt is not needed in the
+	// prompt itself: "анимируй, котика" must send "котика" to the service, not
+	// ", котика".
 	prompt = strings.TrimLeftFunc(prompt, isCommandSeparator)
 	prompt = strings.TrimSpace(prompt)
 
@@ -79,8 +80,8 @@ func buildAiPrompt(message *models.Message, keywords ...string) string {
 
 // isBareCommand reports whether the already lowercased text is nothing but one
 // of the keywords, optionally followed by question marks. Unlike isCommand it
-// takes no arguments after the keyword: «что тут» и «что тут?» — это команда,
-// а «что тут происходит» — обычная болтовня, на которую бот лезть не должен.
+// takes no arguments after the keyword: "что тут" and "что тут?" are commands,
+// while "что тут происходит" is ordinary chatter the bot must stay out of.
 func isBareCommand(text string, keywords ...string) bool {
 	text = strings.TrimSpace(text)
 	for _, keyword := range keywords {

@@ -16,7 +16,7 @@ func TestIsCommand(t *testing.T) {
 		{"нарисуй", true},
 		{"draw", true},
 		{"нарисуй\nкотика", true},
-		// Запятую после команды люди ставят не задумываясь.
+		// People put a comma after the command without thinking.
 		{"нарисуй, котика", true},
 		{"нарисуй,котика", true},
 		{"нарисуй: котика", true},
@@ -91,7 +91,8 @@ func TestBuildAiPromptUsesCaption(t *testing.T) {
 	}
 }
 
-// Знак препинания отделяет команду от промпта, но в сам промпт не попадает.
+// A punctuation mark separates the command from the prompt but does not get
+// into the prompt itself.
 func TestBuildAiPromptDropsSeparator(t *testing.T) {
 	cases := []struct {
 		text string
@@ -112,7 +113,8 @@ func TestBuildAiPromptDropsSeparator(t *testing.T) {
 	}
 }
 
-// Запятая отделяет команду и от текста сообщения, на которое отвечают.
+// A comma also separates the command from the text of the message being replied
+// to.
 func TestBuildAiPromptWithSeparatorAndReply(t *testing.T) {
 	message := &models.Message{
 		Text:           "нарисуй, аниме",

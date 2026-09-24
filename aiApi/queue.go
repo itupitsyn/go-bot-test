@@ -8,52 +8,57 @@ import (
 	"time"
 )
 
-// Сколько примерно занимает одна задача — из этого складывается ETA в очереди.
-// Замер 2026-09-04 на боксе после починки памяти: видео в серии 85 с, видео
-// следом за лёгкой задачей 111 с (перепиннинг весов стоит ~25 с), картинка
-// 25 с. Округляем вверх: обещать дольше и отдать раньше лучше, чем наоборот.
+// Roughly how long one job takes; the queue ETA is built from this. Measured
+// 2026-09-04 on the box after the memory fix: a video in a series takes 85 s, a
+// video right after a light job 111 s (re-pinning the weights costs ~25 s), an
+// image 25 s. Rounded up: promising longer and delivering sooner beats the
+// opposite.
 const (
 	videoJobEstimate = 100 * time.Second
 	imageJobEstimate = 30 * time.Second
-	// Транскрипция зависит от длины записи, так что это просто грубая середина.
+	// Transcription depends on the recording length, so this is just a rough
+	// middle.
 	otherJobEstimate = 60 * time.Second
 )
 
-// QueueStatus — положение задачи в очереди сервиса генерации.
+// QueueStatus is the job's position in the generation service queue.
 type QueueStatus struct {
-	// Running — за задачу уже взялись, ждать осталось только её саму.
+	// Running means the job has been picked up, and only the job itself is left
+	// to wait for.
 	Running bool
-	// Ahead — сколько задач сервис обслужит раньше нашей, считая и ту, что
-	// уже считается. Ноль означает, что очереди нет вовсе, и это важно
-	// отличать от «одна впереди»: планировщик на сервисе не строго FIFO (он
-	// добивает видео одного подтипа, пока модель тёплая), так что число —
-	// это «сколько народу впереди», а не точный порядок обслуживания.
+	// Ahead is how many jobs the service will serve before ours, including the
+	// one already running. Zero means there is no queue at all, and it matters
+	// to tell that apart from "one ahead": the scheduler on the service is not
+	// strictly FIFO (it finishes videos of one subtype while the model is
+	// warm), so the number means "how many people are ahead", not the exact
+	// order of service.
 	Ahead int
-	// ETA — грубая оценка времени до старта нашей задачи.
+	// ETA is a rough estimate of the time until our job starts.
 	ETA time.Duration
 }
 
-// ProgressFunc сообщает, где задача в очереди; вызывается на каждом опросе,
-// пока та ждёт или считается.
+// ProgressFunc reports where the job is in the queue; it is called on every
+// poll while the job waits or runs.
 type ProgressFunc func(QueueStatus)
 
-// queueResponse — ответ /api/queue. Берём только то, из чего считается место:
-// остальные поля там для диагностики сервиса.
+// queueResponse is the /api/queue response. Only what the place is computed
+// from is taken: the other fields are there for service diagnostics.
 type queueResponse struct {
 	Running *struct {
 		ID   string `json:"id"`
 		Type string `json:"type"`
-		// Elapsed — сколько задача уже считается, в секундах.
+		// Elapsed is how long the job has been running, in seconds.
 		Elapsed float64 `json:"elapsed"`
 	} `json:"running"`
-	// Pending приходит по возрастанию времени постановки.
+	// Pending comes in ascending order of submission time.
 	Pending []struct {
 		ID   string `json:"id"`
 		Type string `json:"type"`
 	} `json:"pending"`
 }
 
-// jobEstimate — ожидаемая длительность задачи по её типу из ответа сервиса.
+// jobEstimate is the expected job duration by its type from the service
+// response.
 func jobEstimate(jobType string) time.Duration {
 	switch jobType {
 	case "t2v", "i2v":
@@ -65,10 +70,11 @@ func jobEstimate(jobType string) time.Duration {
 	}
 }
 
-// getQueueStatus спрашивает у сервиса, где в очереди стоит задача id.
+// getQueueStatus asks the service where job id stands in the queue.
 //
-// Задачи нет ни на счёте, ни в очереди (уже готова, либо сервис перезапустился
-// и забыл о ней) — возвращает nil без ошибки: показывать в этом случае нечего.
+// When the job is neither running nor queued (already done, or the service
+// restarted and forgot about it), it returns nil without an error: there is
+// nothing to show in that case.
 func getQueueStatus(host, id string) (*QueueStatus, error) {
 	res, err := pollClient.Get(host + "/api/queue")
 	if err != nil {
@@ -94,8 +100,8 @@ func getQueueStatus(host, id string) (*QueueStatus, error) {
 		return &QueueStatus{Running: true}, nil
 	}
 
-	// До старта нашей задачи сервису надо доделать текущую и разгрести всё,
-	// что встало в очередь раньше нас.
+	// Before our job starts, the service has to finish the current one and
+	// clear everything queued before us.
 	var eta time.Duration
 	ahead := 0
 

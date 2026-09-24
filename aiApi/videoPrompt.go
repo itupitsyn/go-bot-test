@@ -2,30 +2,30 @@ package aiApi
 
 import "strings"
 
-// Шаблоны движения для видео — то же, что стили у картинок, только полезная
-// ось здесь не внешний вид, а движение и камера: у i2v картинка внешний вид
-// уже задала, а у t2v его всё равно описывает сам запрос.
+// Motion templates for video: the same thing as styles for images, except the
+// useful axis here is not the look but motion and camera: in i2v the image has
+// already set the look, and in t2v the request describes it anyway.
 //
-// Написаны предложениями, а не перечислением через запятую, потому что H3
-// читает промпт энкодером Qwen3-VL 32B и сэмплится без guidance
-// (BasicGuider, турбо-LoRA в 8 шагов) — «качественные» токены там не рычаг,
-// а просто лишние слова.
+// They are written as sentences rather than comma-separated lists because H3
+// reads the prompt with a Qwen3-VL 32B encoder and samples without guidance
+// (BasicGuider, a turbo LoRA in 8 steps): "quality" tokens are no lever there,
+// just extra words.
 //
-// Звук упомянут в каждом шаблоне не для красоты: H3 генерит стерео в том же
-// проходе, и дорожка в любом случае окажется в mp4. Не сказать про неё —
-// значит отдать её на волю модели.
+// Sound is mentioned in every template for a reason: H3 generates stereo in the
+// same pass, and the track ends up in the mp4 anyway. Not mentioning it means
+// leaving it to the model's whim.
 type videoStyle struct {
-	// suffixes — чем пользователь включает шаблон. Ищутся в конце запроса,
-	// как и у картинок: «анимируй кота вокруг».
+	// suffixes are how the user turns the template on. They are looked for at
+	// the end of the request, as with images: "анимируй кота вокруг".
 	suffixes []string
 	template string
 }
 
-// defaultVideoTemplate работает, когда ключевого слова нет.
+// defaultVideoTemplate applies when there is no keyword.
 const defaultVideoTemplate = "%s. Natural smooth motion, steady camera, consistent lighting. Ambient sound that matches the scene."
 
-// defaultVideoSubject подставляется, если после срезки ключевого слова не
-// осталось ничего — модели нужен хоть какой-то субъект.
+// defaultVideoSubject is substituted when nothing is left after cutting off the
+// keyword: the model needs at least some subject.
 const defaultVideoSubject = "the scene comes to life"
 
 var videoStyles = []videoStyle{
@@ -87,8 +87,8 @@ func getVideoPrompt(msgText string) string {
 	return text
 }
 
-// buildVideoPrompt собирает финальный промпт: переводит то, что попросил
-// пользователь, и оборачивает в шаблон выбранного движения.
+// buildVideoPrompt assembles the final prompt: it translates what the user
+// asked for and wraps it in the template of the chosen motion.
 func buildVideoPrompt(msgText string) (string, error) {
 	template := getVideoTemplate(msgText)
 

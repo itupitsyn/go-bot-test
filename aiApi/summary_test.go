@@ -24,8 +24,8 @@ func TestSummarySystemPromptNamesTheLanguage(t *testing.T) {
 		if !strings.Contains(prompt, c[1]) {
 			t.Errorf("summarySystemPrompt(%q): нет %q в %s", c[0], c[1], prompt)
 		}
-		// Сам код в промпт попадать не должен: расшифровывать его модель
-		// не обязана, за неё это уже сделали.
+		// The code itself must not get into the prompt: the model is not
+		// obliged to decode it, that has already been done for it.
 		if strings.Contains(prompt, "IETF") {
 			t.Errorf("summarySystemPrompt(%q) всё ещё просит разобрать код: %s", c[0], prompt)
 		}
@@ -33,8 +33,8 @@ func TestSummarySystemPromptNamesTheLanguage(t *testing.T) {
 }
 
 func TestSummarySystemPromptFallsBack(t *testing.T) {
-	// Telegram присылает language_code не всегда, а код может оказаться и
-	// незнакомым — тогда язык берём из самого текста.
+	// Telegram does not always send language_code, and the code may be unknown:
+	// then the language is taken from the text itself.
 	for _, code := range []string{"", "  ", "xx", "klingon"} {
 		prompt := summarySystemPrompt(code)
 
@@ -44,9 +44,9 @@ func TestSummarySystemPromptFallsBack(t *testing.T) {
 	}
 }
 
-// Пробник: проверяет на живой llm, что пересказ выходит на языке из
-// language_code. Остальное тут детерминированно, а вот язык — единственное,
-// что реально зависит от модели.
+// A probe: it checks against the live llm that the retelling comes out in the
+// language from language_code. Everything else here is deterministic; the
+// language is the only thing that really depends on the model.
 //
 //	AI_SUMMARY_PROBE=1 go test ./aiApi/ -run TestSummaryLanguageProbe -v -timeout 10m
 func TestSummaryLanguageProbe(t *testing.T) {

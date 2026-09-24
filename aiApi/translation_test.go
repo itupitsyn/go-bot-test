@@ -32,9 +32,9 @@ func TestContentOf(t *testing.T) {
 	}
 }
 
-// TestContentOfBadResponses — ровно те формы ответа, на которых прежняя цепочка
-// приведений типа падала в панику и уносила процесс целиком. Здесь важно не
-// то, какая именно вернётся ошибка, а что она вернётся.
+// TestContentOfBadResponses covers exactly the response shapes on which the old
+// chain of type assertions panicked and took the whole process down. What
+// matters here is not which error comes back but that one does.
 func TestContentOfBadResponses(t *testing.T) {
 	cases := []struct {
 		name string
@@ -62,12 +62,13 @@ func TestContentOfBadResponses(t *testing.T) {
 
 func TestApplyPromptTemplate(t *testing.T) {
 	cases := [][3]string{
-		// Точка в конце перевода не должна удваиваться с точкой шаблона.
+		// A period at the end of the translation must not double up with the
+		// template's period.
 		{"%s. Anime key visual.", "A cat on a roof.", "A cat on a roof. Anime key visual."},
 		{"%s. Anime key visual.", "A cat on a roof", "A cat on a roof. Anime key visual."},
 		{"%s. Anime key visual.", "  A cat on a roof ,", "A cat on a roof. Anime key visual."},
 		{"%s", "A cat on a roof.", "A cat on a roof"},
-		// Знаки внутри фразы не трогаем.
+		// Punctuation inside the phrase is left alone.
 		{"%s. Neon.", "A cat, a dog and a roof.", "A cat, a dog and a roof. Neon."},
 	}
 

@@ -136,13 +136,13 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	utils.ProcessSendMessageError(err, chatId)
 }
 
-// editPhotos собирает картинки для правки: сперва ту, на которую отвечают,
-// потом приложенную к самому сообщению.
+// editPhotos collects the images to edit: first the one being replied to, then
+// the one attached to the message itself.
 //
-// Порядок не случаен: отвечают обычно на исходник, а прикладывают то, что
-// хотят в него добавить, — и сервис трактует несколько картинок как микс.
-// Telegram кладёт в Photo размеры ОДНОГО снимка, поэтому больше двух отсюда
-// не наберётся.
+// The order is no accident: people usually reply to the source and attach what
+// they want to add to it, and the service treats several images as a mix.
+// Telegram puts the sizes of ONE photo into Photo, so there can't be more than
+// two here.
 func editPhotos(message *models.Message) []*models.PhotoSize {
 	var out []*models.PhotoSize
 
@@ -158,14 +158,14 @@ func editPhotos(message *models.Message) []*models.PhotoSize {
 	return out
 }
 
-// editHintText — ответ на «нарисуй» при картинке, но без инструкции.
+// editHintText is the answer to "нарисуй" with an image but no instruction.
 //
-// Угадывать тут нечего: у правки нет осмысленного умолчания, в отличие от
-// анимации, где картинку можно просто оживить.
+// There is nothing to guess here: an edit has no meaningful default, unlike
+// animation, where the image can simply be brought to life.
 const editHintText = "Напиши, что поправить: «нарисуй ей рыжие волосы», " +
 	"«нарисуй зимнюю улицу вместо фона»."
 
-// processEditHint подсказывает, чего не хватило команде.
+// processEditHint tells what the command was missing.
 func processEditHint(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
@@ -176,8 +176,9 @@ func processEditHint(ctx context.Context, b *bot.Bot, update *models.Update) {
 	utils.ProcessSendMessageError(err, chatId)
 }
 
-// processImageEdit правит присланные картинки по инструкции. Сюда попадаем,
-// когда к команде «нарисуй» приложена картинка или она адресована картинке.
+// processImageEdit edits the given images following an instruction. We get here
+// when an image is attached to the "нарисуй" command or the command replies to
+// an image.
 func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, photos []*models.PhotoSize) {
 	chatId := update.Message.Chat.ID
 
@@ -397,18 +398,18 @@ func processTranscription(ctx context.Context, b *bot.Bot, update *models.Update
 	}
 }
 
-// transcribeFile скачивает аудио или видео из Telegram и отдаёт его на
-// расшифровку. Вторым значением возвращает, что сказать в чат вместо текста;
-// пустое — значит, текст есть.
+// transcribeFile downloads an audio or video from Telegram and sends it for
+// transcription. The second value is what to say in the chat instead of the
+// text; empty means there is text.
 func transcribeFile(ctx context.Context, b *bot.Bot, fileID string, caller aiApi.Caller) (string, string) {
 	mediaBytes, mediaName, err := downloadTelegramFile(ctx, b, fileID)
 	if err != nil {
 		log.Println("Error getting media during transcription")
 		log.Println(err)
 
-		// Слишком большой файл — не подохший сервер, а потолок телеги:
-		// врать про сервер тут значит звать человека попробовать ещё раз,
-		// хотя пробовать нечего.
+		// A file that is too big is not a dead server but Telegram's limit:
+		// blaming the server here would invite the person to try again when
+		// there is nothing to retry.
 		if errors.Is(err, ErrFileTooBig) {
 			return "", fileTooBigText
 		}
@@ -431,10 +432,10 @@ func transcribeFile(ctx context.Context, b *bot.Bot, fileID string, caller aiApi
 }
 
 // processSummary retells the message the command replies to. Unlike drawing or
-// transcribing this only costs an llm call, so it goes without the queue and
-// the "Жди теперь" song and dance — just one short "занят" while the llm
-// thinks. Audio and video are the exception: they have to be transcribed
-// first, see processMediaSummary.
+// transcribing this only costs an llm call, so it goes without the "Жди теперь"
+// song and dance, just one short "занят" while the llm thinks. Audio and video
+// get transcribed first, still under the same "занят": for the one who asked it
+// is all one retelling.
 func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 
@@ -447,43 +448,45 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 		utils.ProcessSendMessageError(err, chatId)
 	}
 
-	// Медиа с «что тут» в подписи — это явная просьба к боту, как и с
-	// «расшифруй».
-	if fileID := getTranscribableFileID(update.Message); fileID != "" {
-		processMediaSummary(ctx, b, update, update.Message, fileID)
-		return
+	// Media with "что тут" in the caption is an explicit request to the bot,
+	// just like with "расшифруй". Otherwise a command that replies to nothing
+	// is just a remark in the chat, not a request to the bot: stay silent so as
+	// not to litter with hints.
+	source := update.Message
+	fileID := getTranscribableFileID(source)
+	if fileID == "" {
+		source = update.Message.ReplyToMessage
+		if source == nil {
+			return
+		}
+		// A voice message or video is transcribed first and then retold: asking
+		// "расшифруй" and then "что тут" on the transcription is a needless
+		// extra round.
+		fileID = getTranscribableFileID(source)
 	}
 
-	// Команда без ответа на сообщение — это просто реплика в чате, а не
-	// просьба к боту: молчим, чтобы не мусорить подсказками.
-	source := update.Message.ReplyToMessage
-	if source == nil {
-		return
+	// There is nothing to retell for images without a caption and for stickers:
+	// getMessageText is empty for them. A media caption is not retold: the
+	// point is what was said, and the caption is often the command itself.
+	text := ""
+	if fileID == "" {
+		text = strings.TrimSpace(getMessageText(source))
+		if text == "" {
+			return
+		}
 	}
 
-	// Голосовое или видео сначала расшифровываем, а потом уже пересказываем:
-	// просить «расшифруй», а затем «что тут» на расшифровку — лишний круг.
-	if fileID := getTranscribableFileID(source); fileID != "" {
-		processMediaSummary(ctx, b, update, source, fileID)
-		return
-	}
-
-	// Пересказывать нечего у картинок без подписи и стикеров —
-	// getMessageText для них пуст.
-	text := strings.TrimSpace(getMessageText(source))
-	if text == "" {
-		return
-	}
-
-	// Профилактику проверяем только теперь: на голое «что тут» без ответа
-	// бот молчит, и рассказывать там про ремонт тоже незачем.
+	// Maintenance is checked only now: the bot stays silent on a bare "что тут"
+	// that replies to nothing, and there is no point talking about repairs
+	// there either.
 	if replyIfMaintenance(ctx, b, update.Message) {
 		return
 	}
 
-	// Пересказ считается несколько секунд, и молчать их нельзя: непонятно,
-	// услышали вообще или нет. Ни паузы, ни места в очереди тут не нужно —
-	// очередь про генерацию, а пересказ идёт мимо неё.
+	// A retelling takes a few seconds, and staying silent through them won't
+	// do: it's unclear whether the request was heard at all. The place in the
+	// queue is not shown here even when the transcription waits in it: for the
+	// one asking, a retelling is one short request, not a generation.
 	waitMsg, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chatId,
 		Text:            summaryWaitText,
@@ -491,8 +494,8 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	})
 	utils.ProcessSendMessageError(err, chatId)
 
-	// Отказ кладём в то же сообщение, чтобы не плодить их по чату. Если
-	// отправить «Ща, сек» не вышло, говорим обычным ответом.
+	// A failure goes into the same message so as not to multiply them in the
+	// chat. If sending "Ща, сек" failed, answer with a regular reply.
 	fail := func(reason string) {
 		if waitMsg == nil {
 			reply(reason, update.Message.ID)
@@ -507,8 +510,18 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 		utils.ProcessSendMessageError(botError, chatId)
 	}
 
-	// Язык клиента того, кто спросил, а не того, кто писал исходное сообщение:
-	// пересказ читать спрашивающему. Telegram присылает это поле не всегда.
+	if fileID != "" {
+		failText := ""
+		text, failText = transcribeFile(ctx, b, fileID, messageCaller(update.Message, nil))
+		if failText != "" {
+			fail(failText)
+			return
+		}
+	}
+
+	// The client language of whoever asked, not of whoever wrote the original
+	// message: the retelling is for the asker to read. Telegram doesn't always
+	// send this field.
 	languageCode := ""
 	if update.Message.From != nil {
 		languageCode = update.Message.From.LanguageCode
@@ -534,92 +547,9 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 		})
 	}
 
-	// Пересказ вешаем на исходное сообщение, чтобы он читался под ним.
+	// The retelling is attached to the original message so it reads under it.
 	for _, chunk := range utils.SplitText(summary, telegramTextLimit) {
 		reply(chunk, source.ID)
-	}
-}
-
-// processMediaSummary пересказывает голосовое, кружочек, аудио или видео:
-// сперва расшифровка, потом пересказ её текста. Расшифровка идёт через очередь
-// генерации, поэтому и ожидание тут то же, что у «расшифруй», а не «Ща, сек».
-// Подпись к медиа не пересказываем: суть в том, что сказано, а в подписи
-// зачастую сама команда.
-func processMediaSummary(ctx context.Context, b *bot.Bot, update *models.Update, source *models.Message, fileID string) {
-	chatId := update.Message.Chat.ID
-
-	if replyIfMaintenance(ctx, b, update.Message) {
-		return
-	}
-
-	wait := newChatWaitMessage(ctx, b, chatId, update.Message.ID)
-
-	// Отказ кладём в сообщение ожидания; не вышло его отправить — отвечаем
-	// обычным сообщением.
-	fail := func(reason string) {
-		wait.done()
-
-		if wait == nil {
-			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID:          chatId,
-				Text:            reason,
-				ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
-			})
-			utils.ProcessSendMessageError(err, chatId)
-			return
-		}
-
-		_, err := b.EditMessageText(ctx, &bot.EditMessageTextParams{
-			ChatID:    chatId,
-			MessageID: wait.id(),
-			Text:      reason,
-		})
-		utils.ProcessSendMessageError(err, chatId)
-	}
-
-	text, failText := transcribeFile(ctx, b, fileID, messageCaller(update.Message, wait))
-	if failText != "" {
-		fail(failText)
-		return
-	}
-
-	// Язык — того, кто спросил: см. processSummary.
-	languageCode := ""
-	if update.Message.From != nil {
-		languageCode = update.Message.From.LanguageCode
-	}
-
-	summary, err := aiApi.GetSummary(text, languageCode)
-	if err != nil {
-		log.Println("[error] error summarizing a transcription")
-		log.Println(err)
-		fail(serverDeadText)
-		return
-	}
-
-	if strings.TrimSpace(summary) == "" {
-		fail("Нечего сказать")
-		return
-	}
-
-	wait.done()
-	if wait != nil {
-		b.DeleteMessage(ctx, &bot.DeleteMessageParams{
-			ChatID:    chatId,
-			MessageID: wait.id(),
-		})
-	}
-
-	for _, chunk := range utils.SplitText(summary, telegramTextLimit) {
-		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:          chatId,
-			Text:            chunk,
-			ReplyParameters: &models.ReplyParameters{MessageID: source.ID},
-		})
-		utils.ProcessSendMessageError(err, chatId)
-		if err != nil {
-			return
-		}
 	}
 }
 

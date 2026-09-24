@@ -6,13 +6,15 @@ import (
 )
 
 const (
-	// Кадр вертикальный: ролики смотрят с телефона, и горизонтальный занимал
-	// там полоску посреди экрана. Короткая сторона 768 — родное разрешение
-	// модели, ниже она теряет в детализации, выше просто дольше считает.
+	// The frame is vertical: clips are watched on phones, where a horizontal
+	// one took up a strip in the middle of the screen. The short side of 768 is
+	// the model's native resolution: below it loses detail, above it just takes
+	// longer.
 	//
-	// Стороны кратны 32: сервис режет размер до кратного и молча выдал бы не
-	// то, что просили. Ровные 9:16 при короткой стороне 768 на 32 не делятся,
-	// поэтому длинная — 1344, чуть короче девяти к шестнадцати.
+	// The sides are multiples of 32: the service rounds the size down to a
+	// multiple and would silently return something other than what was asked.
+	// An exact 9:16 with a short side of 768 is not divisible by 32, so the
+	// long side is 1344, a bit shorter than nine to sixteen.
 	defaultVideoWidth  = 768
 	defaultVideoHeight = 1344
 	defaultVideoFps    = 24

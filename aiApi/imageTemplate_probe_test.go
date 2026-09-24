@@ -10,21 +10,22 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Пробник, а не тест: рисует один и тот же сюжет старым и новым шаблоном и
-// раскладывает PNG по папкам. Ничего не утверждает — сравнивать глазами.
+// A probe, not a test: it draws the same subject with the old and the new
+// template and sorts the PNGs into folders. It asserts nothing; compare by eye.
 //
 //	AI_IMAGE_PROBE=1 go test ./aiApi/ -run TestImageTemplateProbe -v -timeout 60m
 //
-// Переменные: AI_IMAGE_PROBE_DIR — куда класть (по умолчанию ./probe_images в
-// корне репозитория), AI_IMAGE_PROBE_SEEDS — сколько картинок на каждую пару
-// сюжет+шаблон (по умолчанию 3).
+// Variables: AI_IMAGE_PROBE_DIR is where to put them (./probe_images in the
+// repository root by default), AI_IMAGE_PROBE_SEEDS is how many images per
+// subject+template pair (3 by default).
 //
-// Чего пробник НЕ умеет: у /api/txt2img нет параметра сида, сервис берёт его
-// случайным. Значит арки сравниваются не попарно, а как две выборки — смотреть
-// надо на общее впечатление от пачки, а не на «вот эта против вот этой».
+// What the probe CANNOT do: /api/txt2img has no seed parameter, the service
+// picks it at random. So the arms are compared not pairwise but as two samples:
+// look at the overall impression of the batch, not at "this one versus that
+// one".
 
-// legacyTemplates — то, что стояло до перехода на Z-Image: пресеты Fooocus под
-// SDXL с CFG 5-7. Держим здесь только ради сравнения.
+// legacyTemplates is what we had before switching to Z-Image: Fooocus presets
+// for SDXL with CFG 5-7. Kept here only for comparison.
 var legacyTemplates = map[string]string{
 	"обычный":     "%s",
 	"аниме":       "%s . anime style, key visual, vibrant, studio anime, highly detailed",
@@ -45,7 +46,8 @@ func probeSeeds() int {
 func probeDir(t *testing.T) string {
 	dir := os.Getenv("AI_IMAGE_PROBE_DIR")
 	if dir == "" {
-		// Тесты бегут из aiApi/, а класть удобнее рядом с проектом.
+		// Tests run from aiApi/, but it is handier to put the output next to
+		// the project.
 		dir = filepath.Join("..", "probe_images")
 	}
 
@@ -73,9 +75,9 @@ func TestImageTemplateProbe(t *testing.T) {
 	}
 
 	cases := []struct {
-		slug  string // латиницей: попадает в имя файла
-		style string // ключевое слово, оно же ключ в legacyTemplates
-		text  string // что «написал пользователь», уже без команды
+		slug  string // latin letters: it goes into the file name
+		style string // the keyword, also the key in legacyTemplates
+		text  string // what "the user wrote", already without the command
 	}{
 		{"cat-plain", "обычный", "рыжий кот на подоконнике, за окном снег"},
 		{"girl-anime", "аниме", "девушка с зонтом под дождём"},
@@ -89,15 +91,15 @@ func TestImageTemplateProbe(t *testing.T) {
 	t.Logf("картинки лягут в %s (по %d на шаблон)", dir, seeds)
 
 	for _, c := range cases {
-		// Ключевое слово в конце — так его напишет пользователь, и так его
-		// увидит getImageTemplate.
+		// The keyword goes at the end: that is how the user writes it and how
+		// getImageTemplate sees it.
 		userText := c.text
 		if c.style != "обычный" {
 			userText = c.text + " " + c.style
 		}
 
-		// Переводим ОДИН раз и отдаём обеим аркам один и тот же текст: иначе
-		// разброс перевода подмешается в разницу шаблонов.
+		// Translate ONCE and give both arms the same text: otherwise the spread
+		// of the translation leaks into the difference between the templates.
 		subject, err := translatePrompt(getImagePrompt(userText))
 		if err != nil {
 			t.Errorf("%s: перевод не удался: %v", c.slug, err)

@@ -206,7 +206,8 @@ func processCallbackQuery(ctx context.Context, b *bot.Bot, update *models.Update
 		return
 	}
 
-	// Потолок и круг считаются на того, кто нажал кнопку, — карту грузит он.
+	// The cap and the round-robin are counted against whoever pressed the
+	// button: they are the one loading the GPU.
 	userID := update.CallbackQuery.From.ID
 
 	var err error

@@ -16,8 +16,8 @@ func TestCallerUserFields(t *testing.T) {
 		t.Errorf("userForm() = %q", got)
 	}
 
-	// Владельца не знаем — поля быть не должно вовсе: наш ноль не должен
-	// уехать на сервис как настоящий id.
+	// The owner is unknown, so the field must be absent altogether: our zero
+	// must not reach the service as a real id.
 	anon := Caller{}
 	if got := anon.userJSON(); got != "" {
 		t.Errorf("для безымянного userJSON() = %q, ждали пусто", got)
@@ -32,8 +32,9 @@ func TestCheckSubmitStatus(t *testing.T) {
 		t.Errorf("на 200 вернулась ошибка: %v", err)
 	}
 
-	// Отказ по потолку должен узнаваться наверху через errors.Is, иначе бот
-	// покажет «сервер подох» там, где сервер жив и здоров.
+	// A refusal over the cap must be recognizable upstream via errors.Is,
+	// otherwise the bot shows "сервер подох" where the server is alive and
+	// well.
 	err := checkSubmitStatus("t2v", http.StatusTooManyRequests, []byte("full"))
 	if !errors.Is(err, ErrQueueFull) {
 		t.Errorf("429 дал %v, ждали ErrQueueFull", err)

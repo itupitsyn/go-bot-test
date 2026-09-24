@@ -10,8 +10,8 @@ func photo(id string, size int) []models.PhotoSize {
 	return []models.PhotoSize{{FileID: id, FileSize: size}}
 }
 
-// Порядок здесь — часть контракта: сервис трактует несколько картинок как
-// микс, и от порядка зависит, что во что подставляется.
+// The order here is part of the contract: the service treats several images as
+// a mix, and the order decides what goes into what.
 func TestEditPhotos(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -70,8 +70,8 @@ func TestEditPhotos(t *testing.T) {
 	}
 }
 
-// Из нескольких размеров одного снимка Telegram нам нужен самый крупный —
-// правка по превьюшке 90x90 смысла не имеет.
+// Of the several sizes of one Telegram photo we need the largest: editing a
+// 90x90 preview makes no sense.
 func TestEditPhotosTakesBiggestSize(t *testing.T) {
 	message := &models.Message{
 		Caption: "нарисуй ей рыжие волосы",

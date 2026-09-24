@@ -10,9 +10,9 @@ import (
 	"strings"
 )
 
-// chatCompletionResponse — ответ OpenAI-совместимой ручки. Полей в нём куда
-// больше, но нам нужен только текст ответа и сообщение об ошибке, если ручка
-// вернула её вместо ответа.
+// chatCompletionResponse is the response of an OpenAI-compatible endpoint. It
+// has many more fields, but we only need the answer text and the error message
+// if the endpoint returned one instead of an answer.
 type chatCompletionResponse struct {
 	Choices []struct {
 		Message struct {
@@ -24,13 +24,14 @@ type chatCompletionResponse struct {
 	} `json:"error"`
 }
 
-// contentOf достаёт текст ответа модели.
+// contentOf extracts the text of the model's answer.
 //
-// Раньше это была цепочка приведений типа без единой проверки, и любой ответ
-// не той формы — отказ модели, пустой choices, обрыв — ронял панику. Хендлеры
-// крутятся каждый в своей горутине, паника в горутине кладёт процесс целиком,
-// так что одна кривая отдача от llm убивала бота вместе со всеми чужими
-// генерациями, которые в тот момент ждали результата.
+// This used to be a chain of type assertions without a single check, and any
+// answer of the wrong shape (a model refusal, empty choices, a cut-off) caused
+// a panic. Handlers each run in their own goroutine, a panic in a goroutine
+// takes down the whole process, so one malformed reply from the llm killed the
+// bot along with everyone else's generations waiting for results at that
+// moment.
 func contentOf(resBytes []byte) (string, error) {
 	var parsed chatCompletionResponse
 	if err := json.Unmarshal(resBytes, &parsed); err != nil {
@@ -47,8 +48,8 @@ func contentOf(resBytes []byte) (string, error) {
 
 	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
 
-	// Пустой ответ дальше не пускаем: генератор получил бы пустой промпт и
-	// нарисовал бы что угодно.
+	// An empty answer is not let through: the generator would get an empty
+	// prompt and draw anything at all.
 	if content == "" {
 		return "", fmt.Errorf("llm returned an empty answer: %s", string(resBytes))
 	}
@@ -58,7 +59,7 @@ func contentOf(resBytes []byte) (string, error) {
 
 const translateSystemPrompt = "Если эта фраза на русском, переведи её на английский. В противном случае оставь как есть. Формат вывода только результат."
 
-// askLLM задаёт модели один вопрос и возвращает её ответ.
+// askLLM asks the model one question and returns its answer.
 func askLLM(systemPrompt, userText string) (string, error) {
 	escapedSystem, err := json.Marshal(systemPrompt)
 	if err != nil {
@@ -95,10 +96,11 @@ func translatePrompt(text string) (string, error) {
 	return askLLM(translateSystemPrompt, text)
 }
 
-// applyPromptTemplate подставляет субъект в шаблон стиля или движения.
+// applyPromptTemplate substitutes the subject into a style or motion template.
 //
-// Хвостовая пунктуация перевода срезается: шаблоны продолжают фразу со своей
-// точки, и без этого выходит «...watching the sunset.. Hard-surface mecha».
+// Trailing punctuation of the translation is cut off: the templates continue
+// the sentence after their own period, and without this you get "...watching
+// the sunset.. Hard-surface mecha".
 func applyPromptTemplate(template, subject string) string {
 	subject = strings.TrimRight(strings.TrimSpace(subject), " .,;:")
 

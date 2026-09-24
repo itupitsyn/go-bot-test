@@ -32,7 +32,8 @@ func TestAiMaintenanceIsActive(t *testing.T) {
 	}
 }
 
-// Пока админка настройку не сохраняла, строки нет — это «профилактики нет».
+// Until the admin panel has saved the setting there is no row, which means "no
+// maintenance".
 func TestGetAiMaintenanceMissingRow(t *testing.T) {
 	db, mock := database.ConnectToMockDB()
 	Init(db)

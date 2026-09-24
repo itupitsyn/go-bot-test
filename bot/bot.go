@@ -60,9 +60,9 @@ func getHandler() bot.HandlerFunc {
 				return
 			}
 
-			// На профилактике кнопку не трогаем в сервис, а говорим об этом
-			// прямо в сообщении. Правка текста заодно снимает кнопку, так что
-			// и запись под неё больше не нужна.
+			// During maintenance the button does not reach the service; instead
+			// we say so right in the message. Editing the text also removes the
+			// button, so its entry is no longer needed either.
 			if text, ok := activeMaintenanceText(); ok {
 				log.Println("Inline AI generation refused: maintenance")
 				if err := editInlineStatus(ctx, b, update.CallbackQuery.InlineMessageID, text); err != nil {
@@ -95,10 +95,10 @@ func getHandler() bot.HandlerFunc {
 				imgPrompt = buildAiPrompt(update.Message, "нарисуй", "draw")
 			}
 
-			// Та же команда, но с картинкой — это правка, а не генерация с
-			// нуля: «нарисуй ей рыжие волосы» в ответ на фото. Промпт там
-			// значит другое (инструкция, а не описание кадра), поэтому и ручка
-			// другая.
+			// The same command but with an image is an edit, not a generation
+			// from scratch: "нарисуй ей рыжие волосы" in reply to a photo. The
+			// prompt means something else there (an instruction, not a
+			// description of the frame), so the endpoint is different too.
 			editImages := []*models.PhotoSize(nil)
 			if isDraw {
 				editImages = editPhotos(update.Message)
@@ -217,9 +217,9 @@ func New(ctx context.Context) *bot.Bot {
 		bot.WithAllowedUpdates([]string{"callback_query", "message", "inline_query"}),
 	}
 
-	// Свой telegram-bot-api в режиме --local отдаёт файлы до 2 ГБ вместо
-	// 20 МБ у облачного — без этого длинное видео не расшифровать. Не задан —
-	// ходим в облако, как раньше.
+	// Our own telegram-bot-api in --local mode serves files up to 2 GB instead
+	// of the cloud's 20 MB; without it a long video can't be transcribed. When
+	// unset, we go to the cloud as before.
 	if serverURL := strings.TrimSuffix(os.Getenv("TELEGRAM_API_URL"), "/"); serverURL != "" {
 		opts = append(opts, bot.WithServerURL(serverURL))
 	}

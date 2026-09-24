@@ -10,25 +10,26 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Пробник для подкрутки одного стиля: рисует один сюжет несколькими
-// вариантами шаблона, чтобы было что сравнить глазами.
+// A probe for tuning a single style: it draws one subject with several template
+// variants so there is something to compare by eye.
 //
 //	AI_STYLE_PROBE=1 go test ./aiApi/ -run TestStyleCandidatesProbe -v -timeout 60m
 //
-// Переменные те же, что у TestImageTemplateProbe: AI_IMAGE_PROBE_DIR и
-// AI_IMAGE_PROBE_SEEDS. Сид сервис по-прежнему берёт случайным, так что
-// варианты сравниваются как выборки, а не попарно.
+// The variables are the same as for TestImageTemplateProbe: AI_IMAGE_PROBE_DIR
+// and AI_IMAGE_PROBE_SEEDS. The service still picks the seed at random, so the
+// variants are compared as samples, not pairwise.
 
-// styleCandidates — что именно сейчас крутим. Таблица живая: правится под
-// текущую задачу, не хранит историю.
+// styleCandidates is what is being tuned right now. The table is live: it is
+// edited for the task at hand and keeps no history.
 var styleCandidates = []struct {
 	slug     string
-	subject  string            // русский текст без ключевого слова
-	variants map[string]string // имя варианта -> шаблон
+	subject  string            // Russian text without the keyword
+	variants map[string]string // variant name -> template
 }{
-	// Киберпанковый шаблон вышел длинным, слов на пятьдесят. На коротком
-	// запросе вроде «нарисуй кота киберпанк» есть риск, что стиль задавит сам
-	// субъект и вместо кота выйдет просто неоновая улица.
+	// The cyberpunk template came out long, about fifty words. On a short
+	// request like "нарисуй кота киберпанк" there is a risk that the style
+	// overwhelms the subject itself and instead of a cat you get just a neon
+	// street.
 	{
 		slug:     "cyber-cat",
 		subject:  "кот",
@@ -58,8 +59,8 @@ func TestStyleCandidatesProbe(t *testing.T) {
 	t.Logf("картинки лягут в %s (по %d на вариант)", dir, seeds)
 
 	for _, c := range styleCandidates {
-		// Переводим один раз на все варианты — разница должна быть только
-		// в шаблоне.
+		// Translate once for all variants: the only difference should be in the
+		// template.
 		subject, err := translatePrompt(c.subject)
 		if err != nil {
 			t.Errorf("%s: перевод не удался: %v", c.slug, err)
@@ -70,7 +71,7 @@ func TestStyleCandidatesProbe(t *testing.T) {
 		for name := range c.variants {
 			names = append(names, name)
 		}
-		sort.Strings(names) // порядок обхода map случайный, а лог хочется стабильный
+		sort.Strings(names) // map iteration order is random, but a stable log is nicer
 
 		for _, name := range names {
 			prompt := applyPromptTemplate(c.variants[name], subject)

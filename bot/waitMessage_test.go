@@ -52,7 +52,7 @@ func TestFormatQueueStatus(t *testing.T) {
 	}
 }
 
-// editRecorder запоминает правки вместо похода в Telegram.
+// editRecorder records edits instead of going to Telegram.
 type editRecorder struct {
 	mu    sync.Mutex
 	texts []string
@@ -74,7 +74,7 @@ func (r *editRecorder) all() []string {
 	return append([]string(nil), r.texts...)
 }
 
-// testWaitMessage — сообщение с укороченными паузами, чтобы тесты не спали.
+// testWaitMessage is a message with shortened pauses so the tests don't sleep.
 func testWaitMessage() (*waitMessage, *editRecorder) {
 	rec := &editRecorder{}
 	w := newWaitMessage(1, waitText, okText, rec.edit)
@@ -97,7 +97,8 @@ func expectTexts(t *testing.T, got, want []string) {
 	}
 }
 
-// Очередь есть — «Жди теперь» не пишем вовсе, сразу говорим место.
+// There is a queue: "Жди теперь" is not written at all, the place is shown
+// right away.
 func TestWaitMessageShowsQueueInsteadOfWaitPhrase(t *testing.T) {
 	w, rec := testWaitMessage()
 
@@ -108,7 +109,7 @@ func TestWaitMessageShowsQueueInsteadOfWaitPhrase(t *testing.T) {
 	expectTexts(t, rec.all(), []string{"Ты 3-й в очереди, минут 5"})
 }
 
-// Очереди нет — всё как раньше: «Ладно», пауза, «Жди теперь».
+// There is no queue: everything as before, "Ладно", a pause, "Жди теперь".
 func TestWaitMessageWithoutQueue(t *testing.T) {
 	w, rec := testWaitMessage()
 
@@ -119,8 +120,8 @@ func TestWaitMessageWithoutQueue(t *testing.T) {
 	expectTexts(t, rec.all(), []string{waitText})
 }
 
-// Задачу ещё не успели взять на счёт, но и впереди никого — это тоже «нет
-// очереди», а не очередь из одного себя.
+// The job hasn't been picked up yet, but nobody is ahead either: that is also
+// "no queue", not a queue consisting of oneself.
 func TestWaitMessageWithEmptyQueue(t *testing.T) {
 	w, rec := testWaitMessage()
 
@@ -131,8 +132,8 @@ func TestWaitMessageWithEmptyQueue(t *testing.T) {
 	expectTexts(t, rec.all(), []string{waitText})
 }
 
-// Вестей об очереди не дождались (сервис думает над промптом) — пишем
-// «Жди теперь» вслепую, как раньше, а не молчим.
+// No news about the queue arrived in time (the service is thinking over the
+// prompt): write "Жди теперь" blindly as before rather than stay silent.
 func TestWaitMessageFallsBackWhenStatusIsLate(t *testing.T) {
 	w, rec := testWaitMessage()
 
@@ -142,8 +143,8 @@ func TestWaitMessageFallsBackWhenStatusIsLate(t *testing.T) {
 	expectTexts(t, rec.all(), []string{waitText})
 }
 
-// Пауза после «Ладно» остаётся, даже когда про очередь известно сразу:
-// она тут ради шутки, а не ради техники.
+// The pause after "Ладно" stays even when the queue is known right away: it is
+// there for the joke, not for technical reasons.
 func TestWaitMessageKeepsTheBeat(t *testing.T) {
 	w, rec := testWaitMessage()
 
@@ -158,7 +159,7 @@ func TestWaitMessageKeepsTheBeat(t *testing.T) {
 	expectTexts(t, rec.all(), []string{"Ты 3-й в очереди, минут 1"})
 }
 
-// Очередь дошла до нашей задачи — только тогда появляется «Жди теперь».
+// The queue has reached our job: only then does "Жди теперь" appear.
 func TestWaitMessageSwitchesToWaitPhraseWhenQueueEnds(t *testing.T) {
 	w, rec := testWaitMessage()
 
@@ -176,8 +177,8 @@ func TestWaitMessageSwitchesToWaitPhraseWhenQueueEnds(t *testing.T) {
 	})
 }
 
-// Ошибка появляется раньше, чем истечёт пауза, — вступление не должно её
-// затереть.
+// The error appears before the pause runs out: the opening must not overwrite
+// it.
 func TestWaitMessageDoneStopsTheOpening(t *testing.T) {
 	w, rec := testWaitMessage()
 
@@ -188,7 +189,7 @@ func TestWaitMessageDoneStopsTheOpening(t *testing.T) {
 	expectTexts(t, rec.all(), nil)
 }
 
-// Телеграм не дал поправить сообщение — следующая смена текста снова пробует.
+// Telegram refused to edit the message: the next text change tries again.
 func TestWaitMessageSurvivesEditError(t *testing.T) {
 	w, rec := testWaitMessage()
 	rec.err = errors.New("telegram is unhappy")
@@ -201,7 +202,7 @@ func TestWaitMessageSurvivesEditError(t *testing.T) {
 	expectTexts(t, rec.all(), []string{"Ты 3-й в очереди, минут 3", waitText})
 }
 
-// На nil (не удалось отправить «Ладно») методы не падают.
+// On nil (sending "Ладно" failed) the methods don't crash.
 func TestWaitMessageToleratesNil(t *testing.T) {
 	var w *waitMessage
 
@@ -213,7 +214,7 @@ func TestWaitMessageToleratesNil(t *testing.T) {
 	}
 }
 
-// testInlineWaitMessage — inline-сообщение с укороченными паузами.
+// testInlineWaitMessage is an inline message with shortened pauses.
 func testInlineWaitMessage() (*waitMessage, *editRecorder) {
 	rec := &editRecorder{}
 	w := newWaitMessage(0, inlineWaitText, inlineOkText, rec.edit)
@@ -223,8 +224,8 @@ func testInlineWaitMessage() (*waitMessage, *editRecorder) {
 	return w, rec
 }
 
-// Пауза после вступления в inline такая же, как в чате, и держится, даже
-// когда про очередь известно сразу.
+// The pause after the opening in inline is the same as in a chat and holds even
+// when the queue is known right away.
 func TestInlineWaitMessageKeepsTheBeat(t *testing.T) {
 	w, rec := testInlineWaitMessage()
 
@@ -239,8 +240,8 @@ func TestInlineWaitMessageKeepsTheBeat(t *testing.T) {
 	expectTexts(t, rec.all(), []string{"Ты 3-й в очереди, минут 5"})
 }
 
-// В inline тот же порядок, что и в чате, только слова свои: вступление уже
-// написано, дальше очередь, а «ОЖИДАЕМ!!!» — последнее.
+// Inline follows the same order as a chat, only with its own words: the opening
+// is already written, then the queue, and "ОЖИДАЕМ!!!" comes last.
 func TestInlineWaitMessageShowsQueueThenWaitPhrase(t *testing.T) {
 	w, rec := testInlineWaitMessage()
 
@@ -252,8 +253,8 @@ func TestInlineWaitMessageShowsQueueThenWaitPhrase(t *testing.T) {
 	expectTexts(t, rec.all(), []string{"Ты 3-й в очереди, минут 5", inlineWaitText})
 }
 
-// Очереди нет — сразу «ОЖИДАЕМ!!!», и никакого «Жди теперь» в inline быть
-// не должно.
+// No queue: "ОЖИДАЕМ!!!" right away, and there must be no "Жди теперь" in
+// inline.
 func TestInlineWaitMessageWithoutQueue(t *testing.T) {
 	w, rec := testInlineWaitMessage()
 
@@ -271,7 +272,8 @@ func TestInlineWaitMessageWithoutQueue(t *testing.T) {
 }
 
 func TestGenerationErrorText(t *testing.T) {
-	// Отказ по потолку — не поломка, и говорить про подохший сервер нельзя
+	// A refusal over the cap is not a failure, and a dead server must not be
+	// mentioned
 	if got := generationErrorText(fmt.Errorf("t2v: %w", aiApi.ErrQueueFull)); got != queueFullText {
 		t.Errorf("на переполненную очередь получили %q, ждали %q", got, queueFullText)
 	}
@@ -292,7 +294,7 @@ func TestMessageCallerTakesTheSender(t *testing.T) {
 		t.Error("колбэк очереди потерялся")
 	}
 
-	// Пост от имени канала: отправителя нет — id не выдумываем
+	// A post on behalf of a channel: there is no sender, so no id is made up
 	if got := messageCaller(&models.Message{}, w).UserID; got != 0 {
 		t.Errorf("без отправителя UserID = %d, ждали 0", got)
 	}

@@ -7,13 +7,13 @@ import (
 	"time"
 )
 
-// formatQueueStatus говорит, чего ждать. Пока задача стоит в очереди — сколько
-// впереди народу; как только за неё взялись (или впереди никого и не было),
-// очередь кончилась и остаётся обычное «жди».
+// formatQueueStatus says what to expect. While the job is queued, how many
+// people are ahead; as soon as it is picked up (or nobody was ahead in the
+// first place), the queue is over and only a plain "жди" is left.
 //
-// Пустую очередь важно не спутать с «один впереди»: свободная карта успевает
-// взять задачу не мгновенно, и в этот зазор бот не должен объявлять очередь
-// из одного себя.
+// An empty queue must not be confused with "one ahead": a free GPU does not
+// pick up the job instantly, and in that gap the bot must not announce a queue
+// consisting of itself.
 func formatQueueStatus(status aiApi.QueueStatus, waitPhrase string) string {
 	if status.Running || status.Ahead == 0 {
 		return waitPhrase
@@ -22,8 +22,9 @@ func formatQueueStatus(status aiApi.QueueStatus, waitPhrase string) string {
 	return fmt.Sprintf("Ты %d-й в очереди, %s", status.Ahead+1, formatEta(status.ETA))
 }
 
-// formatEta переводит оценку ожидания в человеческие слова. Минуты округляем:
-// точность тут мнимая, ждущему важен порядок величины.
+// formatEta turns the wait estimate into human words. Minutes are rounded: the
+// precision here is illusory, the one waiting cares about the order of
+// magnitude.
 func formatEta(eta time.Duration) string {
 	minutes := int(eta.Round(time.Minute).Minutes())
 	if minutes < 1 {
@@ -33,9 +34,9 @@ func formatEta(eta time.Duration) string {
 	return fmt.Sprintf("минут %d", minutes)
 }
 
-// generationErrorText — что показать вместо результата. Отказ по потолку это
-// не поломка: сказать про подохший сервер, когда человек просто нагенерил
-// лишнего, значит соврать.
+// generationErrorText is what to show instead of the result. A refusal over the
+// cap is not a failure: talking about a dead server when the person has simply
+// generated too much would be a lie.
 func generationErrorText(err error) string {
 	if errors.Is(err, aiApi.ErrQueueFull) {
 		return queueFullText

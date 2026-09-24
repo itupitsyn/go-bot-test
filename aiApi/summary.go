@@ -5,16 +5,16 @@ import (
 	"strings"
 )
 
-// languageNames переводит код из профиля Telegram в название языка для
-// промпта.
+// languageNames maps a code from the Telegram profile to a language name for
+// the prompt.
 //
-// Расшифровывать тег модели доверять нельзя: Qwen3.6 с этим справлялась, а
-// 3.8 на «код IETF de» отвечала то по-русски, то по-английски — три промаха
-// из трёх на пробнике. Название языка обе понимают одинаково, так что решаем
-// это здесь, а не надеждой на модель.
+// The model can't be trusted to decode the tag: Qwen3.6 managed it, but 3.8
+// answered "код IETF de" sometimes in Russian, sometimes in English, three
+// misses out of three on the probe. Both understand a language name the same
+// way, so this is settled here rather than left to the model.
 //
-// Значение — готовый кусок фразы «Отвечай на ...», поэтому у иврита и хинди
-// нет слова «языке»: на них так не говорят.
+// The value is a ready-made piece of the phrase "Отвечай на ...", which is why
+// Hebrew and Hindi have no "языке": that is not how they are said.
 var languageNames = map[string]string{
 	"ru": "русском языке", "uk": "украинском языке", "be": "белорусском языке",
 	"en": "английском языке", "de": "немецком языке", "fr": "французском языке",
@@ -30,9 +30,9 @@ var languageNames = map[string]string{
 	"th": "тайском языке", "id": "индонезийском языке",
 }
 
-// languageName возвращает название языка или пустую строку, если код не
-// знаком. Telegram присылает и региональные теги вроде "pt-BR", а нам важна
-// только базовая часть.
+// languageName returns the language name, or an empty string if the code is
+// unknown. Telegram also sends regional tags like "pt-BR", and only the base
+// part matters to us.
 func languageName(code string) string {
 	code = strings.ToLower(strings.TrimSpace(code))
 	code, _, _ = strings.Cut(code, "-")
@@ -40,11 +40,12 @@ func languageName(code string) string {
 	return languageNames[code]
 }
 
-// summarySystemPrompt собирает системный промпт для пересказа.
+// summarySystemPrompt builds the system prompt for a retelling.
 //
-// languageCode — то, что Telegram кладёт в language_code профиля. Поле
-// необязательное и приходит не всегда; на пустое или незнакомое значение
-// просим пересказ на языке самого текста — это разумнее, чем гадать.
+// languageCode is what Telegram puts in the profile's language_code. The field
+// is optional and not always sent; for an empty or unknown value we ask for the
+// retelling in the language of the text itself, which is more sensible than
+// guessing.
 func summarySystemPrompt(languageCode string) string {
 	answerIn := "Отвечай на языке самого текста."
 	if name := languageName(languageCode); name != "" {
