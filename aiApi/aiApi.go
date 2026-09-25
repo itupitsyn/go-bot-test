@@ -38,3 +38,10 @@ func GetTranscription(mediaBytes []byte, mediaName string, caller Caller) (strin
 func GetSummary(text, languageCode string) (string, error) {
 	return generateSummary(text, languageCode)
 }
+
+// GetImageDescription describes what is in an image, in the language of the
+// languageCode IETF tag from the Telegram profile (Russian when it is empty or
+// unknown).
+func GetImageDescription(image []byte, languageCode string) (string, error) {
+	return generateImageDescription(image, languageCode)
+}

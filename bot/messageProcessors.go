@@ -434,8 +434,8 @@ func transcribeFile(ctx context.Context, b *bot.Bot, fileID string, caller aiApi
 // processSummary retells the message the command replies to. Unlike drawing or
 // transcribing this only costs an llm call, so it goes without the "Жди теперь"
 // song and dance, just one short "занят" while the llm thinks. Audio and video
-// get transcribed first, still under the same "занят": for the one who asked it
-// is all one retelling.
+// get transcribed first, and an image is described by the vision model, still
+// under the same "занят": for the one who asked it is all one retelling.
 func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 
@@ -452,24 +452,28 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	// just like with "расшифруй". Otherwise a command that replies to nothing
 	// is just a remark in the chat, not a request to the bot: stay silent so as
 	// not to litter with hints.
+	//
+	// A voice message or video is transcribed first and then retold: asking
+	// "расшифруй" and then "что тут" on the transcription is a needless extra
+	// round. An image goes to the vision model, whose description is the
+	// answer itself.
 	source := update.Message
 	fileID := getTranscribableFileID(source)
-	if fileID == "" {
+	imageID := getDescribableImageFileID(source)
+	if fileID == "" && imageID == "" {
 		source = update.Message.ReplyToMessage
 		if source == nil {
 			return
 		}
-		// A voice message or video is transcribed first and then retold: asking
-		// "расшифруй" and then "что тут" on the transcription is a needless
-		// extra round.
 		fileID = getTranscribableFileID(source)
+		imageID = getDescribableImageFileID(source)
 	}
 
-	// There is nothing to retell for images without a caption and for stickers:
-	// getMessageText is empty for them. A media caption is not retold: the
-	// point is what was said, and the caption is often the command itself.
+	// There is nothing to retell for stickers and the like: getMessageText is
+	// empty for them. A media caption is not retold: the point is what was said
+	// or shown, and the caption is often the command itself.
 	text := ""
-	if fileID == "" {
+	if fileID == "" && imageID == "" {
 		text = strings.TrimSpace(getMessageText(source))
 		if text == "" {
 			return
@@ -527,12 +531,35 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 		languageCode = update.Message.From.LanguageCode
 	}
 
-	summary, err := aiApi.GetSummary(text, languageCode)
-	if err != nil {
-		log.Println("[error] error summarizing a message")
-		log.Println(err)
-		fail(serverDeadText)
-		return
+	var summary string
+	if imageID != "" {
+		image, _, err := downloadTelegramFile(ctx, b, imageID)
+		if err != nil {
+			log.Println("[error] error getting an image to describe")
+			log.Println(err)
+			if errors.Is(err, ErrFileTooBig) {
+				fail(fileTooBigText)
+			} else {
+				fail(serverDeadText)
+			}
+			return
+		}
+
+		summary, err = aiApi.GetImageDescription(image, languageCode)
+		if err != nil {
+			log.Println("[error] error describing an image")
+			log.Println(err)
+			fail(serverDeadText)
+			return
+		}
+	} else {
+		summary, err = aiApi.GetSummary(text, languageCode)
+		if err != nil {
+			log.Println("[error] error summarizing a message")
+			log.Println(err)
+			fail(serverDeadText)
+			return
+		}
 	}
 
 	if strings.TrimSpace(summary) == "" {
@@ -828,6 +855,7 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"<b>Пересказ</b>\n" +
 		"Ответь «Что тут» или «Сократи» на длинное сообщение — бот перескажет его в паре предложений.\n" +
 		"На голосовое, кружочек, аудио или видео — тоже: бот сам расшифрует и сразу перескажет.\n" +
+		"А на картинку — расскажет, что на ней, и перескажет текст, если он там есть.\n" +
 		"Отвечает на языке твоего Telegram.\n\n" +
 		"<b>Ответ на сообщение</b>\n" +
 		"Ответь на любое текстовое сообщение словом «Нарисуй» или «Анимируй» — промптом станет текст того сообщения.\n" +

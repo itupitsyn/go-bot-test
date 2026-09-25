@@ -81,6 +81,36 @@ func getTranscribableFileID(message *models.Message) string {
 	return ""
 }
 
+// describableImageTypes are the image formats sent to the vision model as
+// files. The llm server decodes jpeg, png, gif and bmp, but not webp, so a
+// webp document would only come back as an error.
+var describableImageTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/gif":  true,
+	"image/bmp":  true,
+}
+
+// getDescribableImageFileID returns the id of the image a message carries, or
+// an empty string when it carries none. A photo is taken in its largest size:
+// Telegram keeps photos within 1280 px anyway. An image sent as a file counts
+// only in a format the llm server can read.
+func getDescribableImageFileID(message *models.Message) string {
+	if message == nil {
+		return ""
+	}
+
+	if photo := getBiggestPhoto(message.Photo); photo != nil {
+		return photo.FileID
+	}
+
+	if message.Document != nil && describableImageTypes[message.Document.MimeType] {
+		return message.Document.FileID
+	}
+
+	return ""
+}
+
 // downloadTelegramFile pulls the bytes of a file behind its id and returns them
 // along with the file name, which the generator wants for the multipart upload.
 func downloadTelegramFile(ctx context.Context, b *bot.Bot, fileID string) ([]byte, string, error) {

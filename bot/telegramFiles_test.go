@@ -70,3 +70,36 @@ func TestIsFileTooBig(t *testing.T) {
 		}
 	}
 }
+
+func TestGetDescribableImageFileID(t *testing.T) {
+	cases := []struct {
+		name    string
+		message *models.Message
+		want    string
+	}{
+		{"nil", nil, ""},
+		{
+			"photo takes the largest size",
+			&models.Message{Photo: []models.PhotoSize{{FileID: "small", FileSize: 10}, {FileID: "big", FileSize: 100}}},
+			"big",
+		},
+		{
+			"jpeg document",
+			&models.Message{Document: &models.Document{FileID: "doc", MimeType: "image/jpeg"}},
+			"doc",
+		},
+		{
+			"webp document is not readable by the llm server",
+			&models.Message{Document: &models.Document{FileID: "doc", MimeType: "image/webp"}},
+			"",
+		},
+		{"voice", &models.Message{Voice: &models.Voice{FileID: "voice"}}, ""},
+		{"plain text", &models.Message{Text: "что тут"}, ""},
+	}
+
+	for _, c := range cases {
+		if got := getDescribableImageFileID(c.message); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}

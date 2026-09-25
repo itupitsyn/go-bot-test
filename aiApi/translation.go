@@ -72,8 +72,12 @@ func askLLM(systemPrompt, userText string) (string, error) {
 	}
 
 	requestText := fmt.Sprintf(`{"messages":[{"role":"system","content":%s},{"role":"user","content":%s}], "stream":false, "chat_template_kwargs":{"enable_thinking":false}}`, escapedSystem, escapedUser)
-	requestBody := []byte(requestText)
 
+	return postLLM([]byte(requestText))
+}
+
+// postLLM sends a ready chat completion request and returns the answer text.
+func postLLM(requestBody []byte) (string, error) {
 	res, err := llmClient.Post(fmt.Sprintf("%s/v1/chat/completions", os.Getenv("AI_LLM_URL")), "application/json", bytes.NewReader(requestBody))
 	if err != nil {
 		return "", err
