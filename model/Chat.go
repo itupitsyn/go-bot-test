@@ -18,6 +18,16 @@ func (chat *Chat) Save() (*Chat, error) {
 	return chat, nil
 }
 
+// SetUncensored flips only the censorship flag, so a stale chat can't
+// overwrite whatever else the admin panel changed meanwhile.
+func (chat *Chat) SetUncensored(isUncensored bool) error {
+	err := db.Model(chat).Update("is_uncensored", isUncensored).Error
+	if err == nil {
+		chat.IsUncensored = isUncensored
+	}
+	return err
+}
+
 func GetChatById(id int64) (*Chat, error) {
 	chat := &Chat{
 		ID: id,

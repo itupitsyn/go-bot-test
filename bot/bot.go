@@ -189,6 +189,9 @@ func getHandler() bot.HandlerFunc {
 			} else if strings.HasPrefix(msgTextLower, "/admins") || strings.HasPrefix(msgTextLower, "/admins@"+botName) {
 				log.Println("Admins requested by", userName)
 				processAdmins(ctx, b, update)
+			} else if msgTextLower == "/censorship" || strings.HasPrefix(msgTextLower, "/censorship@"+botName) {
+				log.Println("Censorship switch requested by", userName)
+				processCensorship(ctx, b, update, chat)
 			}
 		}
 	}

@@ -778,6 +778,32 @@ func processUnsetAdmin(ctx context.Context, b *bot.Bot, update *models.Update) {
 	utils.ProcessSendMessageError(err, chatId)
 }
 
+// processCensorship toggles the chat's censorship, the same switch the admin
+// panel has. Only super admins may flip it, like handing out admin rights.
+func processCensorship(ctx context.Context, b *bot.Bot, update *models.Update, chat *model.Chat) {
+	if checkSetCommandInitiator(ctx, b, update) != nil {
+		return
+	}
+	chatId := chat.ID
+
+	msgText := "Цензура снята. Теперь можно материться!"
+	if chat.IsUncensored {
+		msgText = "Цензура включена. Ведём себя прилично."
+	}
+
+	if err := chat.SetUncensored(!chat.IsUncensored); err != nil {
+		log.Println("[error] error switching censorship", err)
+		msgText = "Не вышло, попробуй позже"
+	}
+
+	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:          chatId,
+		Text:            msgText,
+		ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
+	})
+	utils.ProcessSendMessageError(err, chatId)
+}
+
 func processAdmins(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 
@@ -892,7 +918,8 @@ func processHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"Суперадмины — это владелец чата и его админы, я нахожу их сам. Ещё они могут выдать одминку кому угодно:\n" +
 		"/set_admin @user — выдать\n" +
 		"/unset_admin @user — отобрать\n" +
-		"/admins — посмотреть, кто в списке\n\n" +
+		"/admins — посмотреть, кто в списке\n" +
+		"/censorship — включить или выключить цензуру (только суперадмины)\n\n" +
 		"<b>Статистика</b>\n" +
 		"/stats — победители с начала года\n" +
 		"/stats_full — победители за всё время\n\n" +
