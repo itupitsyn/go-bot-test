@@ -38,7 +38,7 @@ func TestQueueProbe(t *testing.T) {
 			_, err := requestImage("кот на подоконнике", Caller{Progress: func(status QueueStatus) {
 				t.Logf("задача %d: running=%v ahead=%d eta=%s",
 					n, status.Running, status.Ahead, status.ETA.Round(time.Second))
-			}})
+			}}, promptOrigin{})
 			if err != nil {
 				t.Errorf("задача %d: %v", n, err)
 			}

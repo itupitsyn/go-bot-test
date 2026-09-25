@@ -10,7 +10,7 @@ import (
 	"os"
 )
 
-func getT2VId(prompt string, width, height, fps int, caller Caller) (error, string) {
+func getT2VId(prompt string, width, height, fps int, caller Caller, origin promptOrigin) (error, string) {
 	log.Println("Start getting t2v id")
 
 	escaped, err := json.Marshal(prompt)
@@ -18,8 +18,8 @@ func getT2VId(prompt string, width, height, fps int, caller Caller) (error, stri
 		return err, ""
 	}
 
-	jsonStr := fmt.Sprintf(`{"prompt": %s, "width": %d, "height": %d, "fps": %d%s}`,
-		string(escaped), width, height, fps, caller.userJSON())
+	jsonStr := fmt.Sprintf(`{"prompt": %s, "width": %d, "height": %d, "fps": %d%s%s}`,
+		string(escaped), width, height, fps, caller.userJSON(), origin.statsJSON())
 	url := fmt.Sprintf("%s/api/t2v", os.Getenv("AI_VIDEO_HOST"))
 
 	res, err := submitClient.Post(url, "application/json", bytes.NewReader([]byte(jsonStr)))
@@ -53,13 +53,13 @@ func getT2VId(prompt string, width, height, fps int, caller Caller) (error, stri
 }
 
 func generateT2V(prompt string, caller Caller) (error, []byte) {
-	videoPrompt, err := buildVideoPrompt(prompt)
+	videoPrompt, origin, err := buildVideoPrompt(prompt)
 	if err != nil {
 		return err, nil
 	}
 	log.Printf("Video prompt: %s\n", videoPrompt)
 
-	err, id := getT2VId(videoPrompt, defaultVideoWidth, defaultVideoHeight, defaultVideoFps, caller)
+	err, id := getT2VId(videoPrompt, defaultVideoWidth, defaultVideoHeight, defaultVideoFps, caller, origin)
 	if err != nil {
 		return err, nil
 	}

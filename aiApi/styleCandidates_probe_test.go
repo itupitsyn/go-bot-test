@@ -78,7 +78,7 @@ func TestStyleCandidatesProbe(t *testing.T) {
 			t.Logf("[%s/%s] %s", c.slug, name, prompt)
 
 			for i := 1; i <= seeds; i++ {
-				imageBytes, err := requestImage(prompt, Caller{})
+				imageBytes, err := requestImage(prompt, Caller{}, promptOrigin{})
 				if err != nil {
 					t.Errorf("%s/%s #%d: %v", c.slug, name, i, err)
 					continue

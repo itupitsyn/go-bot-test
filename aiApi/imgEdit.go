@@ -49,7 +49,7 @@ func getEditInstruction(msgText string) (string, error) {
 	return translatePrompt(text)
 }
 
-func getEditId(prompt string, images []EditImage, caller Caller) (string, error) {
+func getEditId(prompt string, images []EditImage, caller Caller, origin promptOrigin) (string, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
@@ -60,6 +60,9 @@ func getEditId(prompt string, images []EditImage, caller Caller) (string, error)
 		if err := writer.WriteField("user", user); err != nil {
 			return "", err
 		}
+	}
+	if err := origin.writeForm(writer); err != nil {
+		return "", err
 	}
 
 	// The field is called files and is repeated: the service accepts a list and
@@ -128,7 +131,9 @@ func generateImageEdit(msgText string, images []EditImage, caller Caller) ([]byt
 	}
 	log.Printf("Edit instruction: %s (%d image(s))\n", instruction, len(images))
 
-	id, err := getEditId(instruction, images, caller)
+	// Editing has no style templates, so only the raw instruction is worth
+	// reporting: what reached the model is its translation.
+	id, err := getEditId(instruction, images, caller, promptOrigin{Source: msgText})
 	if err != nil {
 		return nil, err
 	}

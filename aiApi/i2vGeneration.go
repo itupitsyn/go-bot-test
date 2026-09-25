@@ -54,7 +54,7 @@ func getImageSize(imageBytes []byte) (error, *ImgSize) {
 	}
 }
 
-func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSize, fps int, caller Caller) (error, string) {
+func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSize, fps int, caller Caller, origin promptOrigin) (error, string) {
 	log.Println("Start getting i2v id")
 
 	body := &bytes.Buffer{}
@@ -76,6 +76,9 @@ func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSiz
 		if err := writer.WriteField("user", user); err != nil {
 			return err, ""
 		}
+	}
+	if err := origin.writeForm(writer); err != nil {
+		return err, ""
 	}
 
 	part, err := writer.CreateFormFile("file", imageName)
@@ -127,7 +130,7 @@ func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSiz
 }
 
 func generateI2V(prompt string, imageBytes []byte, imageName string, caller Caller) (error, []byte) {
-	videoPrompt, err := buildVideoPrompt(prompt)
+	videoPrompt, origin, err := buildVideoPrompt(prompt)
 	if err != nil {
 		return err, nil
 	}
@@ -138,7 +141,7 @@ func generateI2V(prompt string, imageBytes []byte, imageName string, caller Call
 		return err, nil
 	}
 
-	err, id := getI2VId(videoPrompt, imageBytes, imageName, *imgSize, defaultVideoFps, caller)
+	err, id := getI2VId(videoPrompt, imageBytes, imageName, *imgSize, defaultVideoFps, caller, origin)
 	if err != nil {
 		return err, nil
 	}
