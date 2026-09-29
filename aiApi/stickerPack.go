@@ -28,8 +28,13 @@ type StickerEmotion struct {
 	Instruction string
 }
 
-const keepIdentity = ", keep the same face, hairstyle, beard and clothes, " +
-	"keep the same camera framing and background"
+// Nothing here names a particular feature on purpose. The first version said
+// "keep the same face, hairstyle, beard and clothes" — written while looking
+// at a bearded test subject — and the model did as told: it drew a beard on a
+// woman who had none. An instruction to keep a feature reads as a promise that
+// the feature is there. So the demand is about the person, not about parts.
+const keepIdentity = ", keep the same person, do not change their face, hair " +
+	"or clothes, keep the same camera framing and background"
 
 var stickerEmotions = []StickerEmotion{
 	{"laugh", []string{"😂"},
