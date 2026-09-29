@@ -162,6 +162,35 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 	reply(fmt.Sprintf("Готово! Набор здесь: %s%s", link, short))
 }
 
+// uploadSticker hands one picture to Telegram and returns the file id to
+// refer to it by.
+//
+// The upload is a separate call on purpose, and it is the only way that works.
+// The library builds multipart out of the TOP-LEVEL fields of a params struct:
+// an *InputFileUpload lying directly in a field becomes an attached file,
+// while the same thing inside Stickers []InputSticker goes through plain JSON
+// and marshals to the string "@name.png". Telegram then reads that as a URL
+// and answers "failed to get HTTP URL content" — which is exactly what the
+// first live run got. In UploadStickerFileParams the picture IS a top-level
+// field, so it uploads properly, and the file id it returns can be put into
+// the set.
+func uploadSticker(ctx context.Context, b *bot.Bot, userID int64, index int,
+	png []byte) (string, error) {
+	file, err := b.UploadStickerFile(ctx, &bot.UploadStickerFileParams{
+		UserID: userID,
+		Sticker: &models.InputFileUpload{
+			Filename: fmt.Sprintf("sticker%d.png", index),
+			Data:     bytes.NewReader(png),
+		},
+		StickerFormat: "static",
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return file.FileID, nil
+}
+
 // publishStickerPack creates the person's set or refills the one they already
 // have, and returns the link to it.
 //
@@ -184,14 +213,20 @@ func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
 	if existing == nil {
 		inputs := make([]models.InputSticker, 0, len(stickers))
 		for i, s := range stickers {
+			fileID, err := uploadSticker(ctx, b, userID, i, s.PNG)
+			if err != nil {
+				log.Printf("[warn] sticker %s not uploaded: %v\n", s.Emotion.Key, err)
+				continue
+			}
+
 			inputs = append(inputs, models.InputSticker{
-				Sticker: &models.InputFileUpload{
-					Filename: fmt.Sprintf("sticker%d.png", i),
-					Data:     bytes.NewReader(s.PNG),
-				},
+				Sticker:   &models.InputFileString{Data: fileID},
 				Format:    "static",
 				EmojiList: s.Emotion.Emoji,
 			})
+		}
+		if len(inputs) == 0 {
+			return "", fmt.Errorf("no stickers uploaded for set %s", name)
 		}
 
 		ok, err := b.CreateNewStickerSet(ctx, &bot.CreateNewStickerSetParams{
@@ -220,22 +255,33 @@ func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
 		return "", fmt.Errorf("reading sticker set %s: %w", name, err)
 	}
 
+	added := 0
 	for i, s := range stickers {
-		_, err := b.AddStickerToSet(ctx, &bot.AddStickerToSetParams{
+		fileID, err := uploadSticker(ctx, b, userID, i, s.PNG)
+		if err != nil {
+			log.Printf("[warn] sticker %s not uploaded: %v\n", s.Emotion.Key, err)
+			continue
+		}
+
+		if _, err := b.AddStickerToSet(ctx, &bot.AddStickerToSetParams{
 			UserID: userID,
 			Name:   name,
 			Sticker: models.InputSticker{
-				Sticker: &models.InputFileUpload{
-					Filename: fmt.Sprintf("sticker%d.png", i),
-					Data:     bytes.NewReader(s.PNG),
-				},
+				Sticker:   &models.InputFileString{Data: fileID},
 				Format:    "static",
 				EmojiList: s.Emotion.Emoji,
 			},
-		})
-		if err != nil {
+		}); err != nil {
 			log.Printf("[warn] sticker %s not added: %v\n", s.Emotion.Key, err)
+			continue
 		}
+		added++
+	}
+
+	// Старые сносим, только если новые вправду легли: иначе от набора остался
+	// бы один стикер, который Telegram и удалить не даст.
+	if added == 0 {
+		return "", fmt.Errorf("nothing added to set %s", name)
 	}
 
 	for _, old := range set.Stickers {
