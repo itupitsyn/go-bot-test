@@ -9,6 +9,7 @@ import (
 	"telebot/aiApi"
 	"telebot/model"
 	"telebot/utils"
+	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -75,6 +76,21 @@ const stickerPackPrefix = "emo"
 // a trail of abandoned ones.
 func stickerPackName(userID int64) string {
 	return fmt.Sprintf("%s%d_by_%s", stickerPackPrefix, userID, botName)
+}
+
+// stickerPackNameDated is the spare name, used when the plain one is
+// unusable.
+//
+// Telegram keeps the short name of a DELETED set reserved: creating under it
+// answers "name is already occupied", while adding to it answers
+// STICKERSET_INVALID, because there is nothing there any more. A person who
+// deleted their pack and asked for a new one would be stuck between those two
+// refusals forever — seen live on 29.09.2026. The minute of creation makes the
+// name unique without a counter we would have to store and would lose along
+// with the deleted row.
+func stickerPackNameDated(userID int64) string {
+	return fmt.Sprintf("%s%d_%s_by_%s", stickerPackPrefix, userID,
+		time.Now().UTC().Format("060102_1504"), botName)
 }
 
 // stickerPackLink is the address a person opens to add their pack.
@@ -201,61 +217,12 @@ func uploadSticker(ctx context.Context, b *bot.Bot, userID int64, index int,
 func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
 	stickers []aiApi.StickerResult) (string, error) {
 	userID := from.ID
-	name := stickerPackName(userID)
+	title := stickerSetTitle(from)
 
-	existing, err := model.GetStickerPack(userID)
-	if err != nil {
-		// Not knowing what the person had is not a reason to refuse: try to
-		// create, and if the set is already there, fall through to refilling.
-		log.Println("[warn] sticker pack lookup failed:", err)
-	}
-
-	if existing == nil {
-		inputs := make([]models.InputSticker, 0, len(stickers))
-		for i, s := range stickers {
-			fileID, err := uploadSticker(ctx, b, userID, i, s.PNG)
-			if err != nil {
-				log.Printf("[warn] sticker %s not uploaded: %v\n", s.Emotion.Key, err)
-				continue
-			}
-
-			inputs = append(inputs, models.InputSticker{
-				Sticker:   &models.InputFileString{Data: fileID},
-				Format:    "static",
-				EmojiList: s.Emotion.Emoji,
-			})
-		}
-		if len(inputs) == 0 {
-			return "", fmt.Errorf("no stickers uploaded for set %s", name)
-		}
-
-		ok, err := b.CreateNewStickerSet(ctx, &bot.CreateNewStickerSetParams{
-			UserID:   userID,
-			Name:     name,
-			Title:    stickerSetTitle(from),
-			Stickers: inputs,
-		})
-		if err != nil || !ok {
-			// A set with this name may survive a database we have lost. In that
-			// case creating fails and refilling is the right move.
-			if !isStickerSetExists(err) {
-				return "", fmt.Errorf("creating sticker set %s: %w", name, err)
-			}
-		} else {
-			if err := model.SaveStickerPack(userID, name, len(stickers)); err != nil {
-				log.Println("[warn] sticker pack not saved:", err)
-			}
-
-			return stickerPackLink(name), nil
-		}
-	}
-
-	set, err := b.GetStickerSet(ctx, &bot.GetStickerSetParams{Name: name})
-	if err != nil {
-		return "", fmt.Errorf("reading sticker set %s: %w", name, err)
-	}
-
-	added := 0
+	// The pictures go up once and are reused by every attempt below: a file id
+	// from uploadStickerFile is good for as many set operations as we like, and
+	// re-uploading ten PNGs per retry would be paying twice for nothing.
+	inputs := make([]models.InputSticker, 0, len(stickers))
 	for i, s := range stickers {
 		fileID, err := uploadSticker(ctx, b, userID, i, s.PNG)
 		if err != nil {
@@ -263,25 +230,113 @@ func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
 			continue
 		}
 
+		inputs = append(inputs, models.InputSticker{
+			Sticker:   &models.InputFileString{Data: fileID},
+			Format:    "static",
+			EmojiList: s.Emotion.Emoji,
+		})
+	}
+	if len(inputs) == 0 {
+		return "", fmt.Errorf("no stickers uploaded for %d", userID)
+	}
+
+	existing, err := model.GetStickerPack(userID)
+	if err != nil {
+		// Not knowing what the person had is not a reason to refuse: try to
+		// create below, and fall through to refilling if the set is there.
+		log.Println("[warn] sticker pack lookup failed:", err)
+	}
+
+	// A set we already know about is refilled; creating it again would only
+	// collide with itself.
+	if existing != nil {
+		if err := refillStickerSet(ctx, b, userID, existing.Name, inputs); err != nil {
+			log.Printf("[warn] refilling %s failed: %v\n", existing.Name, err)
+		} else {
+			saveStickerPack(userID, existing.Name, len(inputs))
+
+			return stickerPackLink(existing.Name), nil
+		}
+	}
+
+	// Two names are tried. The plain one is what a person keeps for good; the
+	// dated one exists because Telegram holds on to the short name of a set
+	// that has been DELETED. Without it a person who removed their pack and
+	// asked for a new one would be stuck forever: creating says the name is
+	// taken, and refilling finds nothing to fill.
+	for _, name := range []string{stickerPackName(userID), stickerPackNameDated(userID)} {
+		ok, err := b.CreateNewStickerSet(ctx, &bot.CreateNewStickerSetParams{
+			UserID:   userID,
+			Name:     name,
+			Title:    title,
+			Stickers: inputs,
+		})
+		if err == nil && ok {
+			saveStickerPack(userID, name, len(inputs))
+
+			return stickerPackLink(name), nil
+		}
+
+		// Always said out loud. Swallowing this is what made the first live
+		// failure unreadable: the log showed the fallback dying without a word
+		// about why the straight path had not worked.
+		log.Printf("[warn] creating set %s failed (ok=%v): %v\n", name, ok, err)
+
+		// The name being taken is the only refusal worth another attempt: the
+		// set may be ours from a lost database, so try to refill it.
+		if !isStickerSetExists(err) {
+			continue
+		}
+
+		if err := refillStickerSet(ctx, b, userID, name, inputs); err != nil {
+			log.Printf("[warn] refilling %s failed: %v\n", name, err)
+			continue
+		}
+
+		saveStickerPack(userID, name, len(inputs))
+
+		return stickerPackLink(name), nil
+	}
+
+	return "", fmt.Errorf("no way to publish a set for %d", userID)
+}
+
+// saveStickerPack writes the pack down. Failing to remember it does not spoil a
+// pack that already exists, so it only complains.
+func saveStickerPack(userID int64, name string, count int) {
+	if err := model.SaveStickerPack(userID, name, count); err != nil {
+		log.Println("[warn] sticker pack not saved:", err)
+	}
+}
+
+// refillStickerSet puts the new stickers into an existing set and takes the old
+// ones out.
+//
+// New in, old out, in that order: Telegram refuses to delete the last sticker
+// of a set, so removing first could strand it with one picture that can never
+// be replaced. It also means the set is never empty in between.
+func refillStickerSet(ctx context.Context, b *bot.Bot, userID int64, name string,
+	inputs []models.InputSticker) error {
+	set, err := b.GetStickerSet(ctx, &bot.GetStickerSetParams{Name: name})
+	if err != nil {
+		return fmt.Errorf("reading set %s: %w", name, err)
+	}
+
+	added := 0
+	for _, input := range inputs {
 		if _, err := b.AddStickerToSet(ctx, &bot.AddStickerToSetParams{
-			UserID: userID,
-			Name:   name,
-			Sticker: models.InputSticker{
-				Sticker:   &models.InputFileString{Data: fileID},
-				Format:    "static",
-				EmojiList: s.Emotion.Emoji,
-			},
+			UserID:  userID,
+			Name:    name,
+			Sticker: input,
 		}); err != nil {
-			log.Printf("[warn] sticker %s not added: %v\n", s.Emotion.Key, err)
+			log.Printf("[warn] sticker not added to %s: %v\n", name, err)
 			continue
 		}
 		added++
 	}
 
-	// Старые сносим, только если новые вправду легли: иначе от набора остался
-	// бы один стикер, который Telegram и удалить не даст.
 	if added == 0 {
-		return "", fmt.Errorf("nothing added to set %s", name)
+		return fmt.Errorf("nothing added to %s", name)
 	}
 
 	for _, old := range set.Stickers {
@@ -292,11 +347,7 @@ func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
 		}
 	}
 
-	if err := model.SaveStickerPack(userID, name, len(stickers)); err != nil {
-		log.Println("[warn] sticker pack not saved:", err)
-	}
-
-	return stickerPackLink(name), nil
+	return nil
 }
 
 // isStickerSetExists tells the "this name is taken" refusal from the rest.
