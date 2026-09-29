@@ -18,8 +18,9 @@ func getT2VId(prompt string, width, height, fps int, caller Caller, origin promp
 		return err, ""
 	}
 
-	jsonStr := fmt.Sprintf(`{"prompt": %s, "width": %d, "height": %d, "fps": %d%s%s}`,
-		string(escaped), width, height, fps, caller.userJSON(), origin.statsJSON())
+	jsonStr := fmt.Sprintf(`{"prompt": %s, "width": %d, "height": %d, "fps": %d%s%s%s}`,
+		string(escaped), width, height, fps, caller.userJSON(), caller.chatJSON(),
+		origin.statsJSON())
 	url := fmt.Sprintf("%s/api/t2v", os.Getenv("AI_VIDEO_HOST"))
 
 	res, err := submitClient.Post(url, "application/json", bytes.NewReader([]byte(jsonStr)))

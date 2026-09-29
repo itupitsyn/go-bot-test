@@ -80,6 +80,9 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.AiMaintenance{}); err != nil {
 		log.Fatal("Error migrating AiMaintenance", err)
 	}
+	if err := db.AutoMigrate(&model.StickerPack{}); err != nil {
+		log.Fatal("Error migrating StickerPack", err)
+	}
 	log.Println("Successfully migrated all tables")
 
 	model.Init(db)

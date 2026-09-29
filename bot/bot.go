@@ -135,6 +135,14 @@ func getHandler() bot.HandlerFunc {
 			} else if isBareCommand(msgTextLower, "что тут") || isBareCommand(msgTextLower, "сократи", "summarize", "tldr") {
 				log.Println("Summary requested by", userName)
 				processSummary(ctx, b, update)
+			} else if strings.HasPrefix(msgTextLower, "/stickers_delete") || strings.HasPrefix(msgTextLower, "/stickers_delete@"+botName) {
+				// Строго ДО /stickers: HasPrefix("/stickers_delete", "/stickers")
+				// истинно, и обратный порядок увёл бы удаление в генерацию.
+				log.Println("Sticker pack deletion requested by", userName)
+				processStickerPackDelete(ctx, b, update)
+			} else if strings.HasPrefix(msgTextLower, "/stickers") || strings.HasPrefix(msgTextLower, "/stickers@"+botName) {
+				log.Println("Sticker pack requested by", userName)
+				processStickerPack(ctx, b, update)
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)
 				processAIHelp(ctx, b, update)

@@ -19,6 +19,12 @@ type Caller struct {
 	// UserID is the Telegram user id. Zero means "unknown": the service files
 	// such jobs under a shared anonymous user.
 	UserID int64
+	// ChatID is where the job came from. Statistics only: the bot lives in
+	// group chats, so a chat is the unit that is alive or dead, and user ids
+	// alone never tell how many groups still use it. Zero means the field is
+	// not sent. It has no effect on the queue — fairness is per person, or a
+	// single crowded chat would take the whole pool.
+	ChatID int64
 	// Progress receives the job's place in the queue on every poll; nil means
 	// the queue is not tracked.
 	Progress ProgressFunc
@@ -35,6 +41,16 @@ func (c Caller) userJSON() string {
 	return `, "user": ` + strconv.FormatInt(c.UserID, 10)
 }
 
+// chatJSON is the origin chat for a json request body, leading comma included.
+// Empty when unknown, for the same reason as userJSON.
+func (c Caller) chatJSON() string {
+	if c.ChatID == 0 {
+		return ""
+	}
+
+	return `, "chat": ` + strconv.FormatInt(c.ChatID, 10)
+}
+
 // userForm is the owner for a multipart request. An empty string means the
 // field is not sent.
 func (c Caller) userForm() string {
@@ -43,4 +59,14 @@ func (c Caller) userForm() string {
 	}
 
 	return strconv.FormatInt(c.UserID, 10)
+}
+
+// chatForm is the origin chat for a multipart request. An empty string means
+// the field is not sent.
+func (c Caller) chatForm() string {
+	if c.ChatID == 0 {
+		return ""
+	}
+
+	return strconv.FormatInt(c.ChatID, 10)
 }

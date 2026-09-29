@@ -77,6 +77,12 @@ func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSiz
 			return err, ""
 		}
 	}
+
+	if chat := caller.chatForm(); chat != "" {
+		if err := writer.WriteField("chat", chat); err != nil {
+			return err, ""
+		}
+	}
 	if err := origin.writeForm(writer); err != nil {
 		return err, ""
 	}

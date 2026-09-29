@@ -36,6 +36,12 @@ func getTranscriptionId(mediaBytes []byte, mediaName string, caller Caller) (str
 		}
 	}
 
+	if chat := caller.chatForm(); chat != "" {
+		if err := writer.WriteField("chat", chat); err != nil {
+			return "", err
+		}
+	}
+
 	part, err := writer.CreateFormFile("file", mediaName)
 	if err != nil {
 		return "", err

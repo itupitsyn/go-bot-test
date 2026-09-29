@@ -253,6 +253,9 @@ func messageCaller(message *models.Message, wait *waitMessage) aiApi.Caller {
 	if message != nil && message.From != nil {
 		caller.UserID = message.From.ID
 	}
+	if message != nil {
+		caller.ChatID = message.Chat.ID
+	}
 
 	return caller
 }
@@ -260,6 +263,11 @@ func messageCaller(message *models.Message, wait *waitMessage) aiApi.Caller {
 // inlineCaller is the same for pressing the button under an inline result.
 // Whoever presses is not necessarily the owner of the image, so we take the
 // presser: the cap and the round-robin are about whoever loads the GPU.
+//
+// No ChatID here on purpose: an inline result is sent from a chat Telegram
+// never names to us, so there is nothing honest to report. Such jobs land in
+// the statistics without a chat, and that is itself the answer — it tells how
+// much of the load comes through inline mode.
 func inlineCaller(userID int64, wait *waitMessage) aiApi.Caller {
 	return aiApi.Caller{UserID: userID, Progress: wait.progress}
 }

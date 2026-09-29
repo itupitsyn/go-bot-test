@@ -49,7 +49,11 @@ func getEditInstruction(msgText string) (string, error) {
 	return translatePrompt(text)
 }
 
-func getEditId(prompt string, images []EditImage, caller Caller, origin promptOrigin) (string, error) {
+// getEditId submits the edit. sticker asks the service to cut the background
+// out and fit the result into a 512x512 square with transparency — everything
+// Telegram wants from a sticker, done where the picture already is.
+func getEditId(prompt string, images []EditImage, caller Caller, origin promptOrigin,
+	sticker bool) (string, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
@@ -61,8 +65,20 @@ func getEditId(prompt string, images []EditImage, caller Caller, origin promptOr
 			return "", err
 		}
 	}
+
+	if chat := caller.chatForm(); chat != "" {
+		if err := writer.WriteField("chat", chat); err != nil {
+			return "", err
+		}
+	}
 	if err := origin.writeForm(writer); err != nil {
 		return "", err
+	}
+
+	if sticker {
+		if err := writer.WriteField("sticker", "true"); err != nil {
+			return "", err
+		}
 	}
 
 	// The field is called files and is repeated: the service accepts a list and
@@ -133,7 +149,7 @@ func generateImageEdit(msgText string, images []EditImage, caller Caller) ([]byt
 
 	// Editing has no style templates, so only the raw instruction is worth
 	// reporting: what reached the model is its translation.
-	id, err := getEditId(instruction, images, caller, promptOrigin{Source: msgText})
+	id, err := getEditId(instruction, images, caller, promptOrigin{Source: msgText}, false)
 	if err != nil {
 		return nil, err
 	}

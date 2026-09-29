@@ -165,7 +165,8 @@ func requestImage(prompt string, caller Caller, origin promptOrigin) ([]byte, er
 		return nil, err
 	}
 
-	jsonStr := fmt.Appendf(nil, `{"prompt": %s%s%s}`, string(escapedPrompt), caller.userJSON(), origin.statsJSON())
+	jsonStr := fmt.Appendf(nil, `{"prompt": %s%s%s%s}`, string(escapedPrompt),
+		caller.userJSON(), caller.chatJSON(), origin.statsJSON())
 
 	url := fmt.Sprintf("%s/api/txt2img", os.Getenv("AI_PAINTER_HOST"))
 	res, err := submitClient.Post(url, "application/json", bytes.NewReader(jsonStr))
