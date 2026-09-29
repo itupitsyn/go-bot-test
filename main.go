@@ -83,6 +83,21 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.StickerPack{}); err != nil {
 		log.Fatal("Error migrating StickerPack", err)
 	}
+	// Снимаем уникальность с users.name. Она осталась от прежней схемы, а
+	// AutoMigrate ограничения не убирает — в модели поле давно объявлено
+	// обычным индексом, и база с кодом разошлись.
+	//
+	// Уникальность тут неверна по сути. name — это username из Telegram: у
+	// многих он пустой, и первый же безымянный участник занимал "", после чего
+	// второй не сохранялся вовсе и выпадал из розыгрышей. Плюс username
+	// меняется и переходит от человека к человеку. Постоянный идентификатор —
+	// это ID, он и есть первичный ключ.
+	//
+	// IF EXISTS: на новой базе ограничения нет, и это нормальный ход событий.
+	if err := db.Exec(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_name_key`).Error; err != nil {
+		log.Fatal("Error dropping users_name_key", err)
+	}
+
 	log.Println("Successfully migrated all tables")
 
 	model.Init(db)

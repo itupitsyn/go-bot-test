@@ -63,6 +63,13 @@ func getTranscribableFileID(message *models.Message) string {
 	}
 
 	switch {
+	// Гифка — это видео БЕЗ звуковой дорожки, расшифровывать там нечего.
+	// Проверка стоит первой и обрывает разбор, потому что Telegram для
+	// совместимости заполняет у анимации ещё и Document с типом video/mp4, и
+	// без этой ветки гифка проваливалась в проверку Document ниже, уезжала в
+	// whisper и валилась там на «Output file #0 does not contain any stream».
+	case message.Animation != nil:
+		return ""
 	case message.Voice != nil:
 		return message.Voice.FileID
 	case message.Audio != nil:
@@ -106,6 +113,13 @@ func getDescribableImageFileID(message *models.Message) string {
 
 	if message.Document != nil && describableImageTypes[message.Document.MimeType] {
 		return message.Document.FileID
+	}
+
+	// У гифки описываем превью — единственный кадр, который Telegram даёт нам
+	// готовой картинкой. Декодировать видео ради этого мы не умеем, а на
+	// вопрос «что тут» ответить всё-таки лучше по первому кадру, чем молчать.
+	if message.Animation != nil && message.Animation.Thumbnail != nil {
+		return message.Animation.Thumbnail.FileID
 	}
 
 	return ""
