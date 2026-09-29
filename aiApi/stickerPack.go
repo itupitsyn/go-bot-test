@@ -33,8 +33,14 @@ type StickerEmotion struct {
 // at a bearded test subject — and the model did as told: it drew a beard on a
 // woman who had none. An instruction to keep a feature reads as a promise that
 // the feature is there. So the demand is about the person, not about parts.
-const keepIdentity = ", keep the same person, do not change their face, hair " +
-	"or clothes, keep the same camera framing and background"
+// Nothing is said about the pose or the framing, and that is deliberate too.
+// The first version demanded "keep the same camera framing and background",
+// added back when a drifting crop was a real problem. It stopped being one:
+// cutout.py squares every sticker around the subject, so the framing is
+// normalised after the fact. What the demand did keep doing was fighting the
+// emotions — a facepalm needs a raised hand, sleeping needs a drooping head,
+// and an order to hold the camera still made them stiff.
+const keepIdentity = ", keep the same person, do not change their face, hair or clothes"
 
 var stickerEmotions = []StickerEmotion{
 	{"laugh", []string{"😂"},
