@@ -347,7 +347,30 @@ func refillStickerSet(ctx context.Context, b *bot.Bot, userID int64, name string
 		}
 	}
 
+	resetStickerSetThumbnail(ctx, b, userID, name)
+
 	return nil
+}
+
+// resetStickerSetThumbnail drops the set's own thumbnail so that Telegram goes
+// back to showing the first sticker.
+//
+// A refill leaves the preview stale: the set keeps pointing at the picture it
+// was given when it was made, and after the old stickers have been deleted
+// that picture is gone while the preview still shows it. Passing no thumbnail
+// at all is what the API takes as "use the first sticker", and the parameter
+// is omitempty precisely so it can be left out.
+//
+// A failure here is only cosmetic — the stickers are already in place — so it
+// is logged and forgotten.
+func resetStickerSetThumbnail(ctx context.Context, b *bot.Bot, userID int64, name string) {
+	if _, err := b.SetStickerSetThumbnail(ctx, &bot.SetStickerSetThumbnailParams{
+		Name:   name,
+		UserID: userID,
+		Format: "static",
+	}); err != nil {
+		log.Printf("[warn] thumbnail of %s not reset: %v\n", name, err)
+	}
 }
 
 // isStickerSetExists tells the "this name is taken" refusal from the rest.
