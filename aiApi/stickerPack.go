@@ -40,7 +40,13 @@ type StickerEmotion struct {
 // normalised after the fact. What the demand did keep doing was fighting the
 // emotions — a facepalm needs a raised hand, sleeping needs a drooping head,
 // and an order to hold the camera still made them stiff.
-const keepIdentity = ", keep the same person, do not change their face, hair or clothes"
+// Skin tone and lighting are named, and naming them is safe where naming a
+// beard was not: everyone has both, so asking to keep them invents nothing.
+// The reason they are here: on a photo with dark hair the model painted the
+// sleeper's own arm dark blue-grey, blending it into the hair behind — the arm
+// belonged in the frame, only its colour did not (seen live 29.09.2026).
+const keepIdentity = ", keep the same person, do not change their face, hair, " +
+	"skin tone or clothes, keep the same lighting"
 
 var stickerEmotions = []StickerEmotion{
 	{"laugh", []string{"😂"},
@@ -57,8 +63,14 @@ var stickerEmotions = []StickerEmotion{
 		"make this person squint at the camera with one raised eyebrow, sceptical" + keepIdentity},
 	{"facepalm", []string{"🤦"},
 		"make this person cover their face with one palm in despair" + keepIdentity},
+	// "head drooping" is gone on purpose. A drooping head needs something to
+	// droop onto, and the model obliges: on a photo with long dark hair it
+	// grew a whole extra arm along the body, dark enough to be taken for the
+	// person's own skin (seen twice on live packs, 29.09.2026). Sleeping
+	// peacefully asks for the same thing without inviting a support.
 	{"sleep", []string{"😴"},
-		"make this person asleep, eyes closed, head drooping, mouth slightly open" + keepIdentity},
+		"make this person sleep peacefully, eyes closed, relaxed face, " +
+			"mouth slightly open" + keepIdentity},
 	{"think", []string{"🤔"},
 		"make this person think hard, hand on chin, looking up and aside" + keepIdentity},
 	{"delight", []string{"🤩"},
