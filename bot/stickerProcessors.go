@@ -131,6 +131,14 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 		return
 	}
 
+	// Профилактика проверяется ЗДЕСЬ, а не в разборе команды: на /stickers без
+	// фотографии бот отвечает, что нужна фотография, и говорить про ремонт в
+	// этом случае незачем. Зато до скачивания файла: во время профилактики
+	// картинку тянуть с Telegram уже не за чем.
+	if replyIfMaintenance(ctx, b, message) {
+		return
+	}
+
 	imageBytes, name, err := downloadTelegramFile(ctx, b, biggest.FileID)
 	if err != nil {
 		log.Println("[error] sticker pack: cannot download the photo", err)
@@ -138,10 +146,20 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 		return
 	}
 
+	total := aiApi.StickerPackSize()
+
+	// Набор — это десять генераций подряд, и в лимите он столько и стоит:
+	// счётчик должен отражать нагрузку на карты, а не число команд. Списываем
+	// ДО работы, иначе за те минуты, что набор считается, можно запустить ещё
+	// десять. Что не израсходовалось, вернём ниже.
+	usage, refused := replyIfOverAiLimit(ctx, b, message, aiKindSticker, total)
+	if refused {
+		return
+	}
+
 	wait := newChatWaitMessage(ctx, b, chatID, message.ID)
 	wait.setText(stickerBusyText)
 
-	total := aiApi.StickerPackSize()
 	caller := messageCaller(message, wait)
 	// The pack is long, and the queue position of each separate picture means
 	// nothing to the person waiting. What matters is how many are ready, so the
@@ -154,6 +172,13 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 			wait.setText(fmt.Sprintf("%s\n\nГотово %d из %d.", stickerBusyText, done, all))
 		})
 	wait.done()
+
+	// Эмоция могла не выйти, и тогда набор короче заказанного. Платить за то,
+	// чего нет, человек не должен — переписываем списание по факту. Ноль
+	// стирает его совсем.
+	if setErr := usage.SetUnits(len(stickers)); setErr != nil {
+		log.Println("[error] sticker pack: cannot correct the charge", setErr)
+	}
 
 	if err != nil {
 		log.Println("[error] sticker pack failed:", err)

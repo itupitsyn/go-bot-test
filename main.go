@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"telebot/bot"
 	"telebot/database"
@@ -23,6 +24,7 @@ func main() {
 	defer cancel()
 
 	b := bot.New(ctx)
+	go pruneAiUsage(ctx)
 	go raffleLogic.Listen(b)
 	go bot.StartThumbnailServer(ctx, b)
 	bot.Start(ctx, b)
@@ -83,6 +85,15 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.StickerPack{}); err != nil {
 		log.Fatal("Error migrating StickerPack", err)
 	}
+	if err := db.AutoMigrate(&model.AiLimit{}); err != nil {
+		log.Fatal("Error migrating AiLimit", err)
+	}
+	if err := db.AutoMigrate(&model.AiLimitSettings{}); err != nil {
+		log.Fatal("Error migrating AiLimitSettings", err)
+	}
+	if err := db.AutoMigrate(&model.AiUsage{}); err != nil {
+		log.Fatal("Error migrating AiUsage", err)
+	}
 	// Снимаем уникальность с users.name. Она осталась от прежней схемы, а
 	// AutoMigrate ограничения не убирает — в модели поле давно объявлено
 	// обычным индексом, и база с кодом разошлись.
@@ -112,5 +123,28 @@ func loadDatabase() {
 	}
 	if backfilled > 0 {
 		log.Printf("Gave a preview token to %d inline images\n", backfilled)
+	}
+}
+
+// pruneAiUsage throws away spent quota older than the longest window. Nothing
+// older than a week can affect a decision, and without this the table would
+// grow for as long as the bot runs.
+//
+// Once a day is often enough, and the first sweep happens at startup: a bot
+// that is restarted daily would otherwise never get round to it.
+func pruneAiUsage(ctx context.Context) {
+	for {
+		removed, err := model.PruneAiUsage(time.Now())
+		if err != nil {
+			log.Println("[error] error pruning ai usage", err)
+		} else if removed > 0 {
+			log.Printf("Forgot %d spent ai quota rows\n", removed)
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(24 * time.Hour):
+		}
 	}
 }

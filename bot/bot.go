@@ -109,20 +109,23 @@ func getHandler() bot.HandlerFunc {
 					processEditHint(ctx, b, update)
 				} else {
 					log.Println("Image edit requested by", userName)
-					if !replyIfMaintenance(ctx, b, update.Message) {
+					if !replyIfMaintenance(ctx, b, update.Message) &&
+						!refuseAiCommand(ctx, b, update.Message, aiKindEdit) {
 						wait := sendWaitMessage(chatId, update.Message.ID)
 						processImageEdit(ctx, b, update, wait, imgPrompt, editImages)
 					}
 				}
 			} else if imgPrompt != "" {
 				log.Println("Image generation requested by", userName)
-				if !replyIfMaintenance(ctx, b, update.Message) {
+				if !replyIfMaintenance(ctx, b, update.Message) &&
+					!refuseAiCommand(ctx, b, update.Message, aiKindImage) {
 					wait := sendWaitMessage(chatId, update.Message.ID)
 					processImageGeneration(ctx, b, update, wait, imgPrompt)
 				}
 			} else if isCommand(msgTextLower, "анимируй", "animate") {
 				log.Println("Video generation requested by", userName)
-				if !replyIfMaintenance(ctx, b, update.Message) {
+				if !replyIfMaintenance(ctx, b, update.Message) &&
+					!refuseAiCommand(ctx, b, update.Message, aiKindVideo) {
 					wait := sendWaitMessage(chatId, update.Message.ID)
 					processVideoGeneration(ctx, b, update, wait, buildAiPrompt(update.Message, "анимируй", "animate"))
 				}
