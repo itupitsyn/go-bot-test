@@ -26,6 +26,30 @@ type StickerEmotion struct {
 	Key         string
 	Emoji       []string
 	Instruction string
+	// Pose is the body language for this emotion, added only when the photo
+	// shows a body. Every emotion has one. The first version left it empty for
+	// the three that already name a hand, on the reasoning that a hand moves
+	// the body by itself; that reasoning was never measured and was wrong —
+	// see the comment above approve.
+	Pose string
+}
+
+// Prompt assembles what actually goes to the service.
+//
+// withBody decides both halves. With a body in frame the pose is named and the
+// identity clause allows movement; without one, nothing is said about the body
+// and the clause forbids changing the clothes, which pins the frame.
+func (e StickerEmotion) Prompt(withBody bool) string {
+	if !withBody {
+		return e.Instruction + keepIdentity
+	}
+
+	instruction := e.Instruction
+	if e.Pose != "" {
+		instruction += ", " + e.Pose
+	}
+
+	return instruction + keepIdentityPosed
 }
 
 // Nothing here names a particular feature on purpose. The first version said
@@ -48,33 +72,75 @@ type StickerEmotion struct {
 const keepIdentity = ", keep the same person, do not change their face, hair, " +
 	"skin tone or clothes, keep the same lighting"
 
+// keepIdentityPosed is the same demand for a photo that shows a body, with one
+// word changed: "do not change their clothes" becomes "wearing the same
+// clothes".
+//
+// That one word was what froze the pack. Clothes are the torso, and forbidding
+// any change to them forbids the body to move at all: measured 02.10.2026, the
+// lower half of the frame differed from the source by 3.1 of 255 across four
+// emotions — that is "did not stir". With this wording and a named pose it is
+// 43.5, and the difference is a live pose rather than a redrawn frame.
+//
+// What does NOT work, so that nobody tries it again: an abstract permission
+// ("let their posture shift naturally with the feeling") does not move the
+// person. The model reframes instead — the figure comes out smaller and lower,
+// which inflates any measurement while the pose stays the same. Only a
+// concrete, named pose moves the body.
+const keepIdentityPosed = ", keep the same person: same face, same hair, " +
+	"same skin tone, wearing the same clothes, same lighting"
+
 var stickerEmotions = []StickerEmotion{
-	{"laugh", []string{"😂"},
-		"make this person laugh out loud, head tilted back, eyes squeezed shut" + keepIdentity},
-	{"approve", []string{"👍"},
-		"make this person smile confidently and give a thumbs up to the camera" + keepIdentity},
-	{"deadpan", []string{"😐"},
-		"make this person stare at the camera with a completely blank deadpan face" + keepIdentity},
-	{"angry", []string{"😡"},
-		"make this person furious, brows drawn together, jaw clenched, glaring" + keepIdentity},
-	{"sad", []string{"😢"},
-		"make this person look miserable, mouth turned down, watery eyes" + keepIdentity},
-	{"squint", []string{"🤨"},
-		"make this person squint at the camera with one raised eyebrow, sceptical" + keepIdentity},
-	{"facepalm", []string{"🤦"},
-		"make this person cover their face with one palm in despair" + keepIdentity},
+	{Key: "laugh", Emoji: []string{"😂"},
+		Instruction: "make this person laugh out loud, head tilted back, eyes squeezed shut",
+		Pose:        "shoulders thrown back"},
+	// A named hand does NOT move the body. It was tempting to think it does —
+	// a thumbs up, a palm over the face and a hand on the chin all sound like
+	// whole-body gestures — so the first version gave these three no pose and
+	// shipped. On the live pack the torso came out pixel-identical to the
+	// source on every one of them. Measured against the photo (lower 45% of
+	// the frame, 0–255): thumbs up 18.7, facepalm 18.5, hand on chin 35.0.
+	// With a pose named: 55.1, 57.0, 54.9. The model moves the arm and leaves
+	// the body exactly where it found it unless the body is addressed too.
+	{Key: "approve", Emoji: []string{"👍"},
+		Instruction: "make this person smile confidently and give a thumbs up to the camera",
+		Pose:        "leaning in towards the camera, one shoulder turned forward"},
+	{Key: "deadpan", Emoji: []string{"😐"},
+		Instruction: "make this person stare at the camera with a completely blank deadpan face",
+		Pose:        "shoulders square to the camera, perfectly still"},
+	{Key: "angry", Emoji: []string{"😡"},
+		Instruction: "make this person furious, brows drawn together, jaw clenched, glaring",
+		Pose:        "shoulders squared and leaning in towards the camera"},
+	{Key: "sad", Emoji: []string{"😢"},
+		Instruction: "make this person look miserable, mouth turned down, watery eyes",
+		Pose:        "shoulders slumped and turned away a little"},
+	{Key: "squint", Emoji: []string{"🤨"},
+		Instruction: "make this person squint at the camera with one raised eyebrow, sceptical",
+		Pose:        "upper body turned to one side, leaning back away from the camera"},
+	{Key: "facepalm", Emoji: []string{"🤦"},
+		Instruction: "make this person cover their face with one palm in despair",
+		Pose:        "head bowed into the palm, shoulders drawn up and turned away a little"},
 	// "head drooping" is gone on purpose. A drooping head needs something to
 	// droop onto, and the model obliges: on a photo with long dark hair it
 	// grew a whole extra arm along the body, dark enough to be taken for the
 	// person's own skin (seen twice on live packs, 29.09.2026). Sleeping
 	// peacefully asks for the same thing without inviting a support.
-	{"sleep", []string{"😴"},
-		"make this person sleep peacefully, eyes closed, relaxed face, " +
-			"mouth slightly open" + keepIdentity},
-	{"think", []string{"🤔"},
-		"make this person think hard, hand on chin, looking up and aside" + keepIdentity},
-	{"delight", []string{"🤩"},
-		"make this person beam with delight, wide open shining eyes, huge grin" + keepIdentity},
+	//
+	// Поза по той же причине описывает только голову и плечи: всё, что просит
+	// опереться или уронить, зовёт лишнюю руку. Первый вариант, "shoulders
+	// relaxed", был ещё осторожнее — и не двигал вообще ничего (2.8 из 255,
+	// это замороженный кадр). Наклон головы даёт 36.2 и руки не растит.
+	{Key: "sleep", Emoji: []string{"😴"},
+		Instruction: "make this person sleep peacefully, eyes closed, relaxed face, " +
+			"mouth slightly open",
+		Pose: "head tilted to one side, shoulders dropped"},
+	{Key: "think", Emoji: []string{"🤔"},
+		Instruction: "make this person think hard, hand on chin, looking up and aside",
+		Pose:        "upper body turned a little away from the camera"},
+	{Key: "delight", Emoji: []string{"🤩"},
+		Instruction: "make this person beam with delight, wide open shining eyes, huge grin",
+		Pose: "leaning back with shoulders raised and both hands clasped " +
+			"near the chest"},
 }
 
 // StickerResult is one finished sticker.
@@ -115,13 +181,18 @@ func GenerateStickers(image EditImage, caller Caller,
 	total := len(stickerEmotions)
 	ready := make([]StickerResult, 0, total)
 
+	// Спрашиваем ОДИН раз на набор: фотография у всех десяти одна и та же.
+	// Ответ решает, можно ли называть позу — см. photoShowsBody.
+	withBody := photoShowsBody(image.Bytes)
+	log.Printf("sticker pack: body in frame = %v\n", withBody)
+
 	for _, emotion := range stickerEmotions {
 		// The origin keeps the pack visible in the statistics: source is the
 		// emotion key, so it is clear later what people generate and which of
 		// the ten fail more often than the rest.
 		origin := promptOrigin{Source: "sticker:" + emotion.Key, Style: "sticker"}
 
-		id, err := getEditId(emotion.Instruction, []EditImage{image}, caller, origin, true)
+		id, err := getEditId(emotion.Prompt(withBody), []EditImage{image}, caller, origin, true)
 		if err != nil {
 			// A refusal over the cap means somebody else's jobs are ours too —
 			// there is no point in hammering the rest of the pack into it.
