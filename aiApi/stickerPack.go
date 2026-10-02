@@ -41,7 +41,7 @@ type StickerEmotion struct {
 // and the clause forbids changing the clothes, which pins the frame.
 func (e StickerEmotion) Prompt(withBody bool) string {
 	if !withBody {
-		return e.Instruction + keepIdentity
+		return e.Instruction + greenScreen + keepIdentity
 	}
 
 	instruction := e.Instruction
@@ -49,8 +49,22 @@ func (e StickerEmotion) Prompt(withBody bool) string {
 		instruction += ", " + e.Pose
 	}
 
-	return instruction + keepIdentityPosed
+	return instruction + greenScreen + keepIdentityPosed
 }
+
+// greenScreen просит заменить фон на хромакей, и это НЕ прихоть кадра: по нему
+// на стороне сервиса вырезается фон (см. cutout.py, _GREEN_*).
+//
+// Зачем так. Сегментирующая сеть не достаёт между прядями волос — просветы она
+// заливает человеком, и в стикере между волосами остаются куски исходного фона.
+// Модель правки, в отличие от неё, просовывает зелёный именно туда: она не
+// ищет границу, она рисует картинку заново. Вырезать ровный цвет потом —
+// арифметика, а не угадывание.
+//
+// Сервис к этой строке не привязан жёстко: зелёного в кадре нет — он режет
+// по-старому, маской. Поэтому бот и сервис можно обновлять порознь.
+const greenScreen = ", replace the background behind them with a flat solid " +
+	"chroma key green screen"
 
 // Nothing here names a particular feature on purpose. The first version said
 // "keep the same face, hairstyle, beard and clothes" — written while looking

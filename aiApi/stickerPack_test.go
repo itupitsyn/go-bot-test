@@ -96,3 +96,27 @@ func TestBodyAnswerParsing(t *testing.T) {
 		}
 	}
 }
+
+// Фон вырезается по зелёному (см. cutout.py на стороне сервиса), поэтому просьба
+// о хромакее обязана быть в КАЖДОМ промте — и с телом, и без него.
+func TestEveryPromptAsksForTheGreenScreen(t *testing.T) {
+	for _, e := range stickerEmotions {
+		for _, withBody := range []bool{true, false} {
+			if !strings.Contains(e.Prompt(withBody), greenScreen) {
+				t.Errorf("%s (тело=%v): нет просьбы про зелёный фон: %q",
+					e.Key, withBody, e.Prompt(withBody))
+			}
+		}
+	}
+}
+
+// Просьба про фон идёт ДО требования сохранить человека: так она проверена на
+// живых генерациях 02.10.2026 (зелёного в кадре 50-91%).
+func TestGreenScreenComesBeforeTheIdentityClause(t *testing.T) {
+	for _, e := range stickerEmotions {
+		got := e.Prompt(true)
+		if strings.Index(got, greenScreen) > strings.Index(got, keepIdentityPosed) {
+			t.Errorf("%s: просьба про фон оказалась после требования о человеке", e.Key)
+		}
+	}
+}
