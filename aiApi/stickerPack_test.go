@@ -10,7 +10,7 @@ import (
 // портрете по голову, и модель отъезжает и дорисовывает торс с одеждой.
 func TestPromptWithoutBodySaysNothingAboutPose(t *testing.T) {
 	for _, e := range stickerEmotions {
-		got := e.Prompt(false)
+		got := e.Prompt(false, testScreen)
 
 		if !strings.HasSuffix(got, keepIdentity) {
 			t.Errorf("%s: want the frozen identity clause, got %q", e.Key, got)
@@ -23,7 +23,7 @@ func TestPromptWithoutBodySaysNothingAboutPose(t *testing.T) {
 
 func TestPromptWithBodyNamesThePose(t *testing.T) {
 	for _, e := range stickerEmotions {
-		got := e.Prompt(true)
+		got := e.Prompt(true, testScreen)
 
 		if !strings.HasSuffix(got, keepIdentityPosed) {
 			t.Errorf("%s: want the posed identity clause, got %q", e.Key, got)
@@ -75,7 +75,7 @@ func TestSleepPoseInvitesNoSupport(t *testing.T) {
 	}
 
 	for _, banned := range []string{"droop", "lean", "rest", "arm", "hand", "against", "onto"} {
-		if strings.Contains(strings.ToLower(sleep.Prompt(true)), banned) {
+		if strings.Contains(strings.ToLower(sleep.Prompt(true, testScreen)), banned) {
 			t.Errorf("sleep must not ask for %q: it grows an extra arm", banned)
 		}
 	}
@@ -97,14 +97,20 @@ func TestBodyAnswerParsing(t *testing.T) {
 	}
 }
 
-// Фон вырезается по зелёному (см. cutout.py на стороне сервиса), поэтому просьба
-// о хромакее обязана быть в КАЖДОМ промте — и с телом, и без него.
-func TestEveryPromptAsksForTheGreenScreen(t *testing.T) {
-	for _, e := range stickerEmotions {
-		for _, withBody := range []bool{true, false} {
-			if !strings.Contains(e.Prompt(withBody), greenScreen) {
-				t.Errorf("%s (тело=%v): нет просьбы про зелёный фон: %q",
-					e.Key, withBody, e.Prompt(withBody))
+// testScreen — цвет по умолчанию: с ним промт совпадает с тем, что уходило в
+// сервис до выбора цвета под фотографию.
+var testScreen = screenColours[0]
+
+// Фон вырезается по цвету (см. cutout.py на стороне сервиса), поэтому просьба
+// об экране обязана быть в КАЖДОМ промте — и с телом, и без него.
+func TestEveryPromptAsksForTheScreen(t *testing.T) {
+	for _, screen := range screenColours {
+		for _, e := range stickerEmotions {
+			for _, withBody := range []bool{true, false} {
+				if !strings.Contains(e.Prompt(withBody, screen), screen.clause()) {
+					t.Errorf("%s (тело=%v, экран=%s): нет просьбы про фон: %q",
+						e.Key, withBody, screen.Word, e.Prompt(withBody, screen))
+				}
 			}
 		}
 	}
@@ -112,11 +118,94 @@ func TestEveryPromptAsksForTheGreenScreen(t *testing.T) {
 
 // Просьба про фон идёт ДО требования сохранить человека: так она проверена на
 // живых генерациях 02.10.2026 (зелёного в кадре 50-91%).
-func TestGreenScreenComesBeforeTheIdentityClause(t *testing.T) {
+func TestScreenComesBeforeTheIdentityClause(t *testing.T) {
 	for _, e := range stickerEmotions {
-		got := e.Prompt(true)
-		if strings.Index(got, greenScreen) > strings.Index(got, keepIdentityPosed) {
+		got := e.Prompt(true, testScreen)
+		if strings.Index(got, testScreen.clause()) > strings.Index(got, keepIdentityPosed) {
 			t.Errorf("%s: просьба про фон оказалась после требования о человеке", e.Key)
+		}
+	}
+}
+
+// Формулировка просьбы про зелёный экран не должна меняться молча: именно на
+// ней замерено, что модель перестала растворять руку в фоне.
+func TestGreenClauseKeepsTheMeasuredWording(t *testing.T) {
+	want := ", replace the background behind them with a flat solid chroma key " +
+		"green screen, the green must stay behind them and must not touch the person"
+
+	if got := screenColours[0].clause(); got != want {
+		t.Errorf("просьба про зелёный экран разошлась с замеренной:\n%q", got)
+	}
+}
+
+// Обе руки названы — это лекарство от третьей. Без второй руки в промте модель
+// вешала её на подставленное позой плечо.
+func TestApproveAccountsForBothArms(t *testing.T) {
+	var approve StickerEmotion
+	for _, e := range stickerEmotions {
+		if e.Key == "approve" {
+			approve = e
+		}
+	}
+
+	got := strings.ToLower(approve.Prompt(true, testScreen))
+	for _, want := range []string{"with one hand", "the other arm"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("approve: в промте нет %q: %q", want, got)
+		}
+	}
+}
+
+// Переделать один стикер можно, только если по нему удаётся понять, какая это
+// эмоция. Узнаём по эмодзи — это всё, что Telegram рассказывает о стикере.
+func TestStickerEmotionByEmoji(t *testing.T) {
+	for _, e := range stickerEmotions {
+		for _, emoji := range e.Emoji {
+			got, ok := StickerEmotionByEmoji(emoji)
+			if !ok {
+				t.Errorf("%s: эмодзи %q не нашёлся", e.Key, emoji)
+				continue
+			}
+			if got.Key != e.Key {
+				t.Errorf("%s: эмодзи %q привёл к %s", e.Key, emoji, got.Key)
+			}
+		}
+	}
+
+	if _, ok := StickerEmotionByEmoji("\U0001F680"); ok {
+		t.Error("чужой эмодзи не должен находиться")
+	}
+	if _, ok := StickerEmotionByEmoji(""); ok {
+		t.Error("пустой эмодзи не должен находиться")
+	}
+}
+
+// И это работает, только пока эмодзи у эмоций не повторяются: на общий эмодзи
+// поиск вернул бы первую попавшуюся, и человек получил бы вместо сломанного
+// стикера совсем другой.
+func TestStickerEmojiAreUnique(t *testing.T) {
+	seen := map[string]string{}
+	for _, e := range stickerEmotions {
+		for _, emoji := range e.Emoji {
+			if other, busy := seen[emoji]; busy {
+				t.Errorf("эмодзи %q есть и у %s, и у %s", emoji, other, e.Key)
+			}
+			seen[emoji] = e.Key
+		}
+	}
+}
+
+// Пустой эмодзи у эмоции сделал бы её непочинимой: ответ на её стикер было бы
+// не с чем сопоставить.
+func TestEveryEmotionHasAnEmoji(t *testing.T) {
+	for _, e := range stickerEmotions {
+		if len(e.Emoji) == 0 {
+			t.Errorf("%s: нет ни одного эмодзи", e.Key)
+		}
+		for _, emoji := range e.Emoji {
+			if emoji == "" {
+				t.Errorf("%s: пустой эмодзи в списке", e.Key)
+			}
 		}
 	}
 }

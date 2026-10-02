@@ -29,6 +29,25 @@ type StickerPack struct {
 	// Count is how many stickers ended up in the set. A pack may come out
 	// short: a failed emotion is skipped rather than fatal.
 	Count int `gorm:"not null;default:0"`
+	// PhotoFileID is the Telegram file the pack was drawn from.
+	//
+	// It is kept so that a single sticker can be redrawn later without asking
+	// the person for the photo again — they would have to find it in the chat
+	// history, and the one they found might not be the same one. A file id
+	// issued to our own bot does not expire.
+	//
+	// Empty for a pack made before this was stored: such a pack cannot be
+	// touched one sticker at a time, only remade whole.
+	PhotoFileID string `gorm:"not null;default:''"`
+	// WithBody is the answer the pack used about naming poses, see
+	// aiApi.GenerateStickers.
+	//
+	// Stored rather than asked again, and that is the point: the question goes
+	// to a vision model, and a second asking of the same photo can come back
+	// the other way. A replacement drawn under the opposite answer would sit
+	// among nine stickers made under this one — zoomed out and with a torso
+	// invented, or frozen while the rest move.
+	WithBody bool `gorm:"not null;default:false"`
 	// CreatedAt is when the pack was first made, UpdatedAt when it was last
 	// refilled.
 	CreatedAt time.Time
@@ -53,12 +72,15 @@ func GetStickerPack(userID int64) (*StickerPack, error) {
 }
 
 // SaveStickerPack writes the pack down, overwriting whatever the person had.
-func SaveStickerPack(userID int64, name string, count int) error {
-	pack := StickerPack{UserID: userID, Name: name, Count: count}
+func SaveStickerPack(userID int64, name string, count int, photoFileID string,
+	withBody bool) error {
+	pack := StickerPack{UserID: userID, Name: name, Count: count,
+		PhotoFileID: photoFileID, WithBody: withBody}
 
 	return db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"name", "count", "updated_at"}),
+		Columns: []clause.Column{{Name: "user_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"name", "count",
+			"photo_file_id", "with_body", "updated_at"}),
 	}).Create(&pack).Error
 }
 

@@ -39,9 +39,11 @@ type StickerEmotion struct {
 // withBody decides both halves. With a body in frame the pose is named and the
 // identity clause allows movement; without one, nothing is said about the body
 // and the clause forbids changing the clothes, which pins the frame.
-func (e StickerEmotion) Prompt(withBody bool) string {
+//
+// screen is chosen once per pack from the photo, see screenFor.
+func (e StickerEmotion) Prompt(withBody bool, screen screenColour) string {
 	if !withBody {
-		return e.Instruction + greenScreen + keepIdentity
+		return e.Instruction + screen.clause() + keepIdentity
 	}
 
 	instruction := e.Instruction
@@ -49,22 +51,21 @@ func (e StickerEmotion) Prompt(withBody bool) string {
 		instruction += ", " + e.Pose
 	}
 
-	return instruction + greenScreen + keepIdentityPosed
+	return instruction + screen.clause() + keepIdentityPosed
 }
 
-// greenScreen просит заменить фон на хромакей, и это НЕ прихоть кадра: по нему
-// на стороне сервиса вырезается фон (см. cutout.py, _GREEN_*).
+// Цвет экрана НЕ зашит в промт: он выбирается под фотографию, см.
+// stickerScreen.go. Сама просьба собирается там же, в screenColour.clause().
 //
-// Зачем так. Сегментирующая сеть не достаёт между прядями волос — просветы она
-// заливает человеком, и в стикере между волосами остаются куски исходного фона.
-// Модель правки, в отличие от неё, просовывает зелёный именно туда: она не
-// ищет границу, она рисует картинку заново. Вырезать ровный цвет потом —
-// арифметика, а не угадывание.
+// Зачем вообще экран. Сегментирующая сеть не достаёт между прядями волос —
+// просветы она заливает человеком, и в стикере между волосами остаются куски
+// исходного фона. Модель правки, в отличие от неё, просовывает заливку именно
+// туда: она не ищет границу, она рисует картинку заново. Вырезать ровный цвет
+// потом — арифметика, а не угадывание.
 //
-// Сервис к этой строке не привязан жёстко: зелёного в кадре нет — он режет
-// по-старому, маской. Поэтому бот и сервис можно обновлять порознь.
-const greenScreen = ", replace the background behind them with a flat solid " +
-	"chroma key green screen"
+// Сервис к этой строке не привязан: заливки в кадре нет — он режет по-старому,
+// маской, а какого она цвета, он читает с рамки кадра. Поэтому бот и сервис
+// можно обновлять порознь.
 
 // Nothing here names a particular feature on purpose. The first version said
 // "keep the same face, hairstyle, beard and clothes" — written while looking
@@ -116,9 +117,20 @@ var stickerEmotions = []StickerEmotion{
 	// the frame, 0–255): thumbs up 18.7, facepalm 18.5, hand on chin 35.0.
 	// With a pose named: 55.1, 57.0, 54.9. The model moves the arm and leaves
 	// the body exactly where it found it unless the body is addressed too.
+	//
+	// Both arms are named here, and that is the cure for a third one. Asking
+	// for a thumbs up without saying which hand gave it, and offering a second
+	// shoulder in the pose, let the model hang another arm off that shoulder:
+	// seen live 02.10.2026, and again on one seed of three when reproduced.
+	// With both arms accounted for, three seeds of three came out with one
+	// hand, raised by the shoulder instead of hovering over the chest.
+	//
+	// The torso did NOT move any further for it: 59-68 of 255 against 49-75
+	// before, which is less than the spread between seeds. The extra hand is
+	// gone; the pose is the same pose.
 	{Key: "approve", Emoji: []string{"👍"},
-		Instruction: "make this person smile confidently and give a thumbs up to the camera",
-		Pose:        "leaning in towards the camera, one shoulder turned forward"},
+		Instruction: "make this person smile confidently and give a thumbs up to the camera with one hand",
+		Pose:        "upper body turned a little to one side, the raised arm bent at the elbow, the other arm resting down at their side"},
 	{Key: "deadpan", Emoji: []string{"😐"},
 		Instruction: "make this person stare at the camera with a completely blank deadpan face",
 		Pose:        "shoulders square to the camera, perfectly still"},
@@ -167,11 +179,74 @@ type StickerResult struct {
 // Telegram is happy with one, but a pack of two is not a pack.
 const stickerMinReady = 4
 
+// StickerEmotionByEmoji finds the emotion a sticker answers to.
+//
+// The emoji is what Telegram gives back about a sticker, and it is enough to
+// tell which of the ten it is: no two emotions in the pack share one. Position
+// in the set would not do — a pack may come out short, and then the tenth
+// sticker is not the tenth emotion.
+func StickerEmotionByEmoji(emoji string) (StickerEmotion, bool) {
+	for _, e := range stickerEmotions {
+		for _, own := range e.Emoji {
+			if own == emoji {
+				return e, true
+			}
+		}
+	}
+
+	return StickerEmotion{}, false
+}
+
 // StickerPackSize is how many pictures a pack costs. The bot shows it in the
 // waiting message, so the number must come from here rather than be typed in
 // again next to the text.
 func StickerPackSize() int {
 	return len(stickerEmotions)
+}
+
+// StickerPackResult is everything a pack run produced.
+//
+// WithBody rides along because the caller has to remember it: a sticker
+// redrawn later must be made under the same answer, and asking the vision
+// model a second time about the same photo can give the other one.
+type StickerPackResult struct {
+	Stickers []StickerResult
+	WithBody bool
+}
+
+// generateOne draws a single emotion. Shared by the pack and by a later
+// replacement so that both ask for exactly the same thing.
+func generateOne(image EditImage, emotion StickerEmotion, withBody bool,
+	screen screenColour, caller Caller) ([]byte, error) {
+	// The origin keeps the pack visible in the statistics: source is the
+	// emotion key, so it is clear later what people generate and which of
+	// the ten fail more often than the rest.
+	origin := promptOrigin{Source: "sticker:" + emotion.Key, Style: "sticker"}
+
+	id, err := getEditId(emotion.Prompt(withBody, screen), []EditImage{image},
+		caller, origin, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return waitResult("sticker", os.Getenv("AI_PAINTER_HOST"), id,
+		imagePollInterval, imageMaxWait, nil)
+}
+
+// GenerateSticker redraws one emotion of a pack that already exists.
+//
+// withBody and the photo come from the caller, not from a fresh look: the
+// replacement has to match the nine stickers around it, and both of those
+// decisions were made when the pack was built. The screen colour is derived
+// again rather than stored because screenFor is a function of the photo alone
+// and gives the same answer every time.
+func GenerateSticker(image EditImage, emotion StickerEmotion, withBody bool,
+	caller Caller) ([]byte, error) {
+	if len(image.Bytes) == 0 {
+		return nil, errors.New("no image for the sticker")
+	}
+
+	return generateOne(image, emotion, withBody, screenFor(image.Bytes), caller)
 }
 
 // GenerateStickers turns one photo into the standard pack.
@@ -186,12 +261,11 @@ func StickerPackSize() int {
 // A single failed emotion is skipped rather than fatal: nine stickers are
 // better than an error message. It gives up only when too few came out.
 func GenerateStickers(image EditImage, caller Caller,
-	onProgress func(done, total int)) ([]StickerResult, error) {
+	onProgress func(done, total int)) (StickerPackResult, error) {
 	if len(image.Bytes) == 0 {
-		return nil, errors.New("no image for the sticker pack")
+		return StickerPackResult{}, errors.New("no image for the sticker pack")
 	}
 
-	host := os.Getenv("AI_PAINTER_HOST")
 	total := len(stickerEmotions)
 	ready := make([]StickerResult, 0, total)
 
@@ -199,26 +273,22 @@ func GenerateStickers(image EditImage, caller Caller,
 	// Ответ решает, можно ли называть позу — см. photoShowsBody.
 	withBody := photoShowsBody(image.Bytes)
 	log.Printf("sticker pack: body in frame = %v\n", withBody)
+	out := func(err error) (StickerPackResult, error) {
+		return StickerPackResult{Stickers: ready, WithBody: withBody}, err
+	}
+
+	// Цвет экрана тоже один на набор, и по той же причине: он выбирается по
+	// фотографии, а она одна. См. screenFor.
+	screen := screenFor(image.Bytes)
 
 	for _, emotion := range stickerEmotions {
-		// The origin keeps the pack visible in the statistics: source is the
-		// emotion key, so it is clear later what people generate and which of
-		// the ten fail more often than the rest.
-		origin := promptOrigin{Source: "sticker:" + emotion.Key, Style: "sticker"}
-
-		id, err := getEditId(emotion.Prompt(withBody), []EditImage{image}, caller, origin, true)
+		png, err := generateOne(image, emotion, withBody, screen, caller)
 		if err != nil {
 			// A refusal over the cap means somebody else's jobs are ours too —
 			// there is no point in hammering the rest of the pack into it.
 			if errors.Is(err, ErrQueueFull) {
-				return ready, err
+				return out(err)
 			}
-			log.Printf("sticker %s not submitted: %v\n", emotion.Key, err)
-			continue
-		}
-
-		png, err := waitResult("sticker", host, id, imagePollInterval, imageMaxWait, nil)
-		if err != nil {
 			log.Printf("sticker %s failed: %v\n", emotion.Key, err)
 			continue
 		}
@@ -230,8 +300,8 @@ func GenerateStickers(image EditImage, caller Caller,
 	}
 
 	if len(ready) < stickerMinReady {
-		return ready, fmt.Errorf("only %d of %d stickers came out", len(ready), total)
+		return out(fmt.Errorf("only %d of %d stickers came out", len(ready), total))
 	}
 
-	return ready, nil
+	return out(nil)
 }

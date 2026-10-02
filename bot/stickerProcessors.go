@@ -58,7 +58,9 @@ func stickerSetTitle(from *models.User) string {
 // stickerNoPhotoText is the answer to a bare command. The pack is built from a
 // face, and there is nothing to guess from.
 const stickerNoPhotoText = "Пришли фотографию с лицом — или ответь этой командой " +
-	"на уже присланную, и я сделаю из неё набор стикеров."
+	"на уже присланную, и я сделаю из неё набор стикеров.\n\n" +
+	"А если ответить этой командой на стикер из своего набора, я перерисую " +
+	"его одного."
 
 // stickerBusyText warns about the wait. Ten pictures at around half a minute
 // each is minutes, and a person who is not told that decides the bot is dead.
@@ -121,6 +123,14 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 		photos = message.ReplyToMessage.Photo
 	}
 	if len(photos) == 0 {
+		// Ответ командой на стикер — просьба переделать именно его. Отдельной
+		// команды для этого нет нарочно: «/stickers» уже значит «сделай мне
+		// стикер», и в ответ на один стикер это ровно он.
+		if message.ReplyToMessage != nil && message.ReplyToMessage.Sticker != nil {
+			processStickerReplace(ctx, b, update, message.ReplyToMessage.Sticker)
+			return
+		}
+
 		reply(stickerNoPhotoText)
 		return
 	}
@@ -166,11 +176,12 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 	// wait message shows that instead.
 	caller.Progress = nil
 
-	stickers, err := aiApi.GenerateStickers(
+	pack, err := aiApi.GenerateStickers(
 		aiApi.EditImage{Bytes: imageBytes, Name: name}, caller,
 		func(done, all int) {
 			wait.setText(fmt.Sprintf("%s\n\nГотово %d из %d.", stickerBusyText, done, all))
 		})
+	stickers := pack.Stickers
 	wait.done()
 
 	// Эмоция могла не выйти, и тогда набор короче заказанного. Платить за то,
@@ -187,7 +198,8 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 		return
 	}
 
-	link, err := publishStickerPack(ctx, b, message.From, stickers)
+	link, err := publishStickerPack(ctx, b, message.From, stickers,
+		biggest.FileID, pack.WithBody)
 	b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: chatID, MessageID: wait.id()})
 	if err != nil {
 		log.Println("[error] sticker pack not published:", err)
@@ -240,7 +252,7 @@ func uploadSticker(ctx context.Context, b *bot.Bot, userID int64, index int,
 // of a set, so the new ones go in first and the old ones leave afterwards,
 // which also means the set is never empty in between.
 func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
-	stickers []aiApi.StickerResult) (string, error) {
+	stickers []aiApi.StickerResult, photoFileID string, withBody bool) (string, error) {
 	userID := from.ID
 	title := stickerSetTitle(from)
 
@@ -278,7 +290,7 @@ func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
 		if err := refillStickerSet(ctx, b, userID, existing.Name, inputs); err != nil {
 			log.Printf("[warn] refilling %s failed: %v\n", existing.Name, err)
 		} else {
-			saveStickerPack(userID, existing.Name, len(inputs))
+			saveStickerPack(userID, existing.Name, len(inputs), photoFileID, withBody)
 
 			return stickerPackLink(existing.Name), nil
 		}
@@ -297,7 +309,7 @@ func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
 			Stickers: inputs,
 		})
 		if err == nil && ok {
-			saveStickerPack(userID, name, len(inputs))
+			saveStickerPack(userID, name, len(inputs), photoFileID, withBody)
 
 			return stickerPackLink(name), nil
 		}
@@ -318,7 +330,7 @@ func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
 			continue
 		}
 
-		saveStickerPack(userID, name, len(inputs))
+		saveStickerPack(userID, name, len(inputs), photoFileID, withBody)
 
 		return stickerPackLink(name), nil
 	}
@@ -328,8 +340,9 @@ func publishStickerPack(ctx context.Context, b *bot.Bot, from *models.User,
 
 // saveStickerPack writes the pack down. Failing to remember it does not spoil a
 // pack that already exists, so it only complains.
-func saveStickerPack(userID int64, name string, count int) {
-	if err := model.SaveStickerPack(userID, name, count); err != nil {
+func saveStickerPack(userID int64, name string, count int, photoFileID string,
+	withBody bool) {
+	if err := model.SaveStickerPack(userID, name, count, photoFileID, withBody); err != nil {
 		log.Println("[warn] sticker pack not saved:", err)
 	}
 }
