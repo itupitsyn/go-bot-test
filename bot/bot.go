@@ -36,7 +36,9 @@ func getHandler() bot.HandlerFunc {
 			return newChatWaitMessage(ctx, b, chatId, replyToMessageId)
 		}
 
-		if update.InlineQuery != nil {
+		if update.PreCheckoutQuery != nil {
+			processPreCheckout(ctx, b, update)
+		} else if update.InlineQuery != nil {
 			saveUser(update.InlineQuery.From)
 			processInlineQuery(ctx, b, update)
 		} else if update.CallbackQuery != nil {
@@ -50,6 +52,12 @@ func getHandler() bot.HandlerFunc {
 			}); err != nil {
 				log.Println("[error] error answering callback query")
 				log.Println(err)
+			}
+
+			if update.CallbackQuery.Data == aiBuyCallback {
+				log.Println("Stars invoice requested by", userName)
+				processAiBuyCallback(ctx, b, update)
+				return
 			}
 
 			queryData, ok := queries.getValue(update.CallbackQuery.Data)
@@ -85,6 +93,14 @@ func getHandler() bot.HandlerFunc {
 			chatId := update.Message.Chat.ID
 			saveUser(update.Message.From)
 			userName := utils.GetAnyName(update.Message.From)
+
+			// Оплата приезжает обычным сообщением, только вместо текста в нём
+			// successful_payment. Разбирать его дальше как команду незачем.
+			if update.Message.SuccessfulPayment != nil {
+				processSuccessfulPayment(ctx, b, update)
+				return
+			}
+
 			log.Println("Received message from", userName)
 
 			msgTextLower := strings.ToLower(getMessageText(update.Message))
@@ -109,25 +125,29 @@ func getHandler() bot.HandlerFunc {
 					processEditHint(ctx, b, update)
 				} else {
 					log.Println("Image edit requested by", userName)
-					if !replyIfMaintenance(ctx, b, update.Message) &&
-						!refuseAiCommand(ctx, b, update.Message, aiKindEdit) {
-						wait := sendWaitMessage(chatId, update.Message.ID)
-						processImageEdit(ctx, b, update, wait, imgPrompt, editImages)
+					if !replyIfMaintenance(ctx, b, update.Message) {
+						if charge, refused := refuseAiCommand(ctx, b, update.Message, aiKindEdit); !refused {
+							wait := sendWaitMessage(chatId, update.Message.ID)
+							processImageEdit(ctx, b, update, wait, imgPrompt, editImages, charge)
+						}
 					}
 				}
 			} else if imgPrompt != "" {
 				log.Println("Image generation requested by", userName)
-				if !replyIfMaintenance(ctx, b, update.Message) &&
-					!refuseAiCommand(ctx, b, update.Message, aiKindImage) {
-					wait := sendWaitMessage(chatId, update.Message.ID)
-					processImageGeneration(ctx, b, update, wait, imgPrompt)
+				if !replyIfMaintenance(ctx, b, update.Message) {
+					if charge, refused := refuseAiCommand(ctx, b, update.Message, aiKindImage); !refused {
+						wait := sendWaitMessage(chatId, update.Message.ID)
+						processImageGeneration(ctx, b, update, wait, imgPrompt, charge)
+					}
 				}
 			} else if isCommand(msgTextLower, "анимируй", "animate") {
 				log.Println("Video generation requested by", userName)
-				if !replyIfMaintenance(ctx, b, update.Message) &&
-					!refuseAiCommand(ctx, b, update.Message, aiKindVideo) {
-					wait := sendWaitMessage(chatId, update.Message.ID)
-					processVideoGeneration(ctx, b, update, wait, buildAiPrompt(update.Message, "анимируй", "animate"))
+				if !replyIfMaintenance(ctx, b, update.Message) {
+					if charge, refused := refuseAiCommand(ctx, b, update.Message, aiKindVideo); !refused {
+						wait := sendWaitMessage(chatId, update.Message.ID)
+						processVideoGeneration(ctx, b, update, wait,
+							buildAiPrompt(update.Message, "анимируй", "animate"), charge)
+					}
 				}
 			} else if isCommand(msgTextLower, "расшифруй", "transcribe") {
 				log.Println("Transcription requested by", userName)
@@ -155,6 +175,9 @@ func getHandler() bot.HandlerFunc {
 			} else if strings.HasPrefix(msgTextLower, "/forget") || strings.HasPrefix(msgTextLower, "/forget@"+botName) {
 				log.Println("Forgetting inline images requested by", userName)
 				processForgetInlineImages(ctx, b, update)
+			} else if update.Message.Chat.Type == "private" && strings.HasPrefix(msgTextLower, "/start "+aiBuyStartParam) {
+				log.Println("Stars invoice requested by link by", userName)
+				processAiBuyStart(ctx, b, update)
 			} else if update.Message.Chat.Type == "private" && strings.HasPrefix(msgTextLower, "/start "+inlineImageUploadStartParam) {
 				log.Println("Inline image upload started by", userName)
 				processInlineImageUploadStart(ctx, b, update)
@@ -228,7 +251,12 @@ func New(ctx context.Context) *bot.Bot {
 	opts := []bot.Option{
 		bot.WithDefaultHandler(getHandler()),
 		bot.WithMiddlewares(recoverPanics),
-		bot.WithAllowedUpdates([]string{"callback_query", "message", "inline_query"}),
+		// pre_checkout_query обязателен для оплаты звёздами: Telegram ждёт
+		// подтверждения десять секунд и без него отменяет платёж. Апдейта,
+		// которого нет в этом списке, бот не увидит вовсе, и выглядело бы это
+		// как молчаливый отказ оплаты без единой строчки в логе.
+		bot.WithAllowedUpdates([]string{"callback_query", "message",
+			"inline_query", "pre_checkout_query"}),
 	}
 
 	// Our own telegram-bot-api in --local mode serves files up to 2 GB instead

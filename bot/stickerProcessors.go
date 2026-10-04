@@ -162,7 +162,7 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 	// счётчик должен отражать нагрузку на карты, а не число команд. Списываем
 	// ДО работы, иначе за те минуты, что набор считается, можно запустить ещё
 	// десять. Что не израсходовалось, вернём ниже.
-	usage, refused := replyIfOverAiLimit(ctx, b, message, aiKindSticker, total)
+	charge, refused := replyIfOverAiLimit(ctx, b, message, aiKindSticker, total)
 	if refused {
 		return
 	}
@@ -187,9 +187,7 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 	// Эмоция могла не выйти, и тогда набор короче заказанного. Платить за то,
 	// чего нет, человек не должен — переписываем списание по факту. Ноль
 	// стирает его совсем.
-	if setErr := usage.SetUnits(len(stickers)); setErr != nil {
-		log.Println("[error] sticker pack: cannot correct the charge", setErr)
-	}
+	charge.setUnits(len(stickers))
 
 	if err != nil {
 		log.Println("[error] sticker pack failed:", err)
@@ -203,6 +201,9 @@ func processStickerPack(ctx context.Context, b *bot.Bot, update *models.Update) 
 	b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: chatID, MessageID: wait.id()})
 	if err != nil {
 		log.Println("[error] sticker pack not published:", err)
+		// Набор нарисован, но до Telegram не доехал — человеку достался
+		// пустой экран, и платить ему не за что.
+		charge.setUnits(0)
 		reply(serverDeadText)
 		return
 	}

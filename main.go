@@ -82,6 +82,14 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.AiMaintenance{}); err != nil {
 		log.Fatal("Error migrating AiMaintenance", err)
 	}
+	if err := db.AutoMigrate(&model.AiCredit{}); err != nil {
+		log.Fatal("Error migrating AiCredit", err)
+	}
+
+	if err := db.AutoMigrate(&model.AiPurchase{}); err != nil {
+		log.Fatal("Error migrating AiPurchase", err)
+	}
+
 	if err := db.AutoMigrate(&model.StickerPack{}); err != nil {
 		log.Fatal("Error migrating StickerPack", err)
 	}

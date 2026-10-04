@@ -121,7 +121,7 @@ func processStickerReplace(ctx context.Context, b *bot.Bot, update *models.Updat
 	}
 
 	// Одна картинка — одна единица лимита. Списываем до работы, как и набор.
-	usage, refused := replyIfOverAiLimit(ctx, b, message, aiKindSticker, 1)
+	charge, refused := replyIfOverAiLimit(ctx, b, message, aiKindSticker, 1)
 	if refused {
 		return
 	}
@@ -131,9 +131,7 @@ func processStickerReplace(ctx context.Context, b *bot.Bot, update *models.Updat
 		// Файл мог исчезнуть вместе с сообщением, из которого брался. Это не
 		// поломка бота, и человеку надо сказать, что делать, а не «ошибка».
 		log.Println("[error] sticker replace: cannot download the source photo", err)
-		if setErr := usage.SetUnits(0); setErr != nil {
-			log.Println("[error] sticker replace: cannot refund", setErr)
-		}
+		charge.setUnits(0)
 		reply(stickerReplaceNoPhotoText)
 		return
 	}
@@ -150,9 +148,7 @@ func processStickerReplace(ctx context.Context, b *bot.Bot, update *models.Updat
 
 	if err != nil {
 		log.Printf("[error] sticker replace %s failed: %v\n", emotion.Key, err)
-		if setErr := usage.SetUnits(0); setErr != nil {
-			log.Println("[error] sticker replace: cannot refund", setErr)
-		}
+		charge.setUnits(0)
 		reply(generationErrorText(err))
 		return
 	}
@@ -161,6 +157,8 @@ func processStickerReplace(ctx context.Context, b *bot.Bot, update *models.Updat
 		emotion, png); err != nil {
 		log.Printf("[error] sticker %s not replaced in %s: %v\n",
 			emotion.Key, pack.Name, err)
+
+		charge.setUnits(0)
 
 		if isStickerSetMissing(err) {
 			if delErr := model.DeleteStickerPack(userID); delErr != nil {

@@ -93,7 +93,7 @@ func processParticipation(update *models.Update) {
 	participants.Save()
 }
 
-func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string) {
+func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, charge *aiCharge) {
 	chatId := update.Message.Chat.ID
 
 	processImgGenerationError := func(text string) {
@@ -112,6 +112,8 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	if err != nil {
 		log.Println(err)
 		log.Println("[error] error generating image")
+		// Картинки нет — и списания быть не должно, см. refuseAiCommand.
+		charge.setUnits(0)
 		processImgGenerationError(generationErrorText(err))
 		return
 	}
@@ -131,6 +133,9 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	})
 
 	if err != nil {
+		// Картинка нарисована, но человек её не увидел. Для него это то же
+		// самое, что не нарисована, — возвращаем.
+		charge.setUnits(0)
 		processImgGenerationError(serverDeadText)
 	}
 	utils.ProcessSendMessageError(err, chatId)
@@ -179,7 +184,7 @@ func processEditHint(ctx context.Context, b *bot.Bot, update *models.Update) {
 // processImageEdit edits the given images following an instruction. We get here
 // when an image is attached to the "нарисуй" command or the command replies to
 // an image.
-func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, photos []*models.PhotoSize) {
+func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, photos []*models.PhotoSize, charge *aiCharge) {
 	chatId := update.Message.Chat.ID
 
 	processEditError := func(text string) {
@@ -215,6 +220,7 @@ func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wa
 	if err != nil {
 		log.Println(err)
 		log.Println("[error] error editing image")
+		charge.setUnits(0)
 		processEditError(generationErrorText(err))
 		return
 	}
@@ -234,12 +240,13 @@ func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wa
 	})
 
 	if err != nil {
+		charge.setUnits(0)
 		processEditError(serverDeadText)
 	}
 	utils.ProcessSendMessageError(err, chatId)
 }
 
-func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string) {
+func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, charge *aiCharge) {
 	chatId := update.Message.Chat.ID
 
 	processVideoGenerationError := func(text string) {
@@ -305,6 +312,7 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	if err != nil {
 		log.Println(err)
 		log.Println("Error generating i2v")
+		charge.setUnits(0)
 		processVideoGenerationError(generationErrorText(err))
 		return
 	}
@@ -325,6 +333,7 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	})
 
 	if err != nil {
+		charge.setUnits(0)
 		processVideoGenerationError("")
 	}
 	utils.ProcessSendMessageError(err, chatId)
