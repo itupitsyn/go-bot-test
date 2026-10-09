@@ -3,6 +3,7 @@ package aiApi
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -28,10 +29,14 @@ const (
 )
 
 // The clients share http.DefaultTransport, i.e. one connection pool, and differ
-// only in the timeout.
+// in the timeout and in whether they carry our token.
+//
+// Only the two that talk to our own generation service are signed. llmClient is
+// left plain on purpose: the LLM lives on another host, and a token sent there
+// would be a secret handed to a service that never asked for it.
 var (
-	submitClient = &http.Client{Timeout: submitTimeout}
-	pollClient   = &http.Client{Timeout: pollTimeout}
+	submitClient = &http.Client{Timeout: submitTimeout, Transport: apiTransport()}
+	pollClient   = &http.Client{Timeout: pollTimeout, Transport: apiTransport()}
 	llmClient    = &http.Client{Timeout: llmTimeout}
 )
 
@@ -55,6 +60,10 @@ func pollResult(host, id string) (*resultResponse, error) {
 	resBytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
+	}
+
+	if res.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf("result request: %w", ErrUnauthorized)
 	}
 
 	if res.StatusCode != http.StatusOK {
@@ -89,6 +98,13 @@ func waitData(kind, host, id string, interval, maxWait time.Duration, onProgress
 
 		res, err := pollResult(host, id)
 		if err != nil {
+			// A rejected token is not a hiccup: repeating the request only
+			// delays the plain answer by maxPollFailures intervals and buries
+			// the reason under "failed 3 times in a row".
+			if errors.Is(err, ErrUnauthorized) {
+				return nil, fmt.Errorf("%s: %w", kind, err)
+			}
+
 			failures++
 			if failures >= maxPollFailures {
 				return nil, fmt.Errorf("%s result request failed %d times in a row, last error: %w", kind, failures, err)
@@ -166,6 +182,8 @@ func checkSubmitStatus(kind string, statusCode int, body []byte) error {
 		return nil
 	case http.StatusTooManyRequests:
 		return fmt.Errorf("%s: %w", kind, ErrQueueFull)
+	case http.StatusUnauthorized:
+		return fmt.Errorf("%s: %w", kind, ErrUnauthorized)
 	default:
 		return fmt.Errorf("%s request failed with status %d: %s", kind, statusCode, string(body))
 	}
