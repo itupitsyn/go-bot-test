@@ -911,7 +911,10 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"<b>Своя картинка в inline</b>\n" +
 		"Пришли мне картинку в личку — и в inline-результатах появится пункт «Анимировать мою картинку». Работает в любом чате, даже если меня там нет.\n" +
 		"Промптом станет то, что набрано после имени бота; не набрано ничего — оживлю как есть.\n" +
-		inlineImageBufferHint()
+		inlineImageBufferHint() +
+		"\n\n<b>Фото и данные</b>\n" +
+		"Что бот делает с присланными фотографиями, сколько хранит и как это " +
+		"убрать — /privacy"
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chatId,
 		Text:            msgText,
