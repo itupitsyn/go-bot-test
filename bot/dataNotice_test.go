@@ -1,6 +1,8 @@
 package bot
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"telebot/model"
@@ -9,8 +11,9 @@ import (
 
 // Формулировка про данные опасна ровно одним: она называет конкретные числа, и
 // если настройку поменяют, текст станет врать молча. Здесь проверяются те два
-// числа, которые живут в этом же модуле. Остальные (6 часов, 7 суток, 30 суток)
-// задаются в сервисе на питоне, и из Go их не видно — про это написано в шапке
+// числа, которые живут в этом же модуле. Остальные (6 часов, 7 суток срок
+// вывода, 7 суток учёт) задаются в сервисе на питоне, и из Go их не видно —
+// про это написано в шапке
 // dataNotice.go, и при их изменении текст придётся править руками.
 func TestDataNoticeMatchesInlineSettings(t *testing.T) {
 	text := dataNoticeText()
@@ -57,5 +60,35 @@ func TestDataNoticeStatesConsentAndRevision(t *testing.T) {
 	if !strings.Contains(text, dataNoticeRevision) {
 		t.Errorf("в тексте нет редакции %s — согласие не привязано к версии",
 			dataNoticeRevision)
+	}
+}
+
+// Отпечаток обязан быть настоящим хешем тела, а не однажды вписанной строкой.
+// Вписанный руками он перестанет меняться вместе с текстом — и вся затея
+// развалится молча, ровно так, как уже случилось с одной датой редакции.
+func TestDataNoticeFingerprintMatchesBody(t *testing.T) {
+	body := dataNoticeBody()
+	sum := sha256.Sum256([]byte(body))
+	want := hex.EncodeToString(sum[:3])
+
+	text := dataNoticeText()
+	if !strings.Contains(text, want) {
+		t.Errorf("в тексте нет отпечатка %s, посчитанного от тела", want)
+	}
+
+	// И наоборот: отпечаток ДРУГОГО текста попасть туда не должен — иначе
+	// проверка выше ничего не значит.
+	other := sha256.Sum256([]byte(body + " "))
+	if alien := hex.EncodeToString(other[:3]); alien != want &&
+		strings.Contains(text, alien) {
+		t.Errorf("в тексте оказался отпечаток %s не этого тела", alien)
+	}
+}
+
+// Тело не должно нести строку редакции: иначе отпечаток считался бы от текста,
+// в который он сам же и входит.
+func TestDataNoticeBodyHasNoRevisionLine(t *testing.T) {
+	if strings.Contains(dataNoticeBody(), "Редакция") {
+		t.Error("строка редакции попала в тело — отпечаток станет замкнутым")
 	}
 }

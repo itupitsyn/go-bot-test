@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"telebot/bot"
@@ -20,14 +21,24 @@ func main() {
 	loadEnv()
 	loadDatabase()
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	// SIGTERM обязателен: его посылает `docker stop`, и без него процесс
+	// умирал мгновенно посреди генерации — вместе с чужой оплатой,
+	// которую некому было вернуть.
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt,
+		syscall.SIGTERM)
 	defer cancel()
 
 	b := bot.New(ctx)
 	go pruneAiUsage(ctx)
 	go raffleLogic.Listen(b)
 	go bot.StartThumbnailServer(ctx, b)
+	go bot.WatchShutdown(ctx)
+
+	// Start возвращается только после того, как доживут начатые
+	// обработчики: рабочая горутина библиотеки вызывает их синхронно,
+	// а Start ждёт все свои горутины.
 	bot.Start(ctx, b)
+	log.Println("Stopped cleanly, nothing left in flight")
 }
 
 func loadEnv() {

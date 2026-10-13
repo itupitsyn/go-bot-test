@@ -253,7 +253,11 @@ func recoverPanics(next bot.HandlerFunc) bot.HandlerFunc {
 func New(ctx context.Context) *bot.Bot {
 	opts := []bot.Option{
 		bot.WithDefaultHandler(getHandler()),
-		bot.WithMiddlewares(recoverPanics),
+		// Порядок значим: m[0] — самый внешний (applyMiddlewares оборачивает
+		// с конца списка). Счётчик снаружи — видит всю обработку целиком;
+		// отвязка от отмены выше recoverPanics, чтобы и он, и сам обработчик
+		// работали с живым контекстом и могли отдать результат.
+		bot.WithMiddlewares(trackInFlight, detachFromShutdown, recoverPanics),
 		// pre_checkout_query обязателен для оплаты звёздами: Telegram ждёт
 		// подтверждения десять секунд и без него отменяет платёж. Апдейта,
 		// которого нет в этом списке, бот не увидит вовсе, и выглядело бы это
