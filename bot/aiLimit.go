@@ -60,6 +60,19 @@ type aiCharge struct {
 	paid   int
 }
 
+// paidUnits is how much money went into this charge. Nil means nobody was
+// charged at all: a person without a quota is not recorded anywhere.
+//
+// Нужно журналу незабранного: он хранит число, а не ссылку на строку списания,
+// потому что возврат идёт через AddAiCredit, которому нужен только счёт.
+func (c *aiCharge) paidUnits() int {
+	if c == nil {
+		return 0
+	}
+
+	return c.paid
+}
+
 // setUnits rewrites what the command ended up costing.
 //
 // Лишнее возвращается СНАЧАЛА в платный карман и только потом в бесплатный.

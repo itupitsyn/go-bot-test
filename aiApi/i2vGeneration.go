@@ -152,6 +152,9 @@ func generateI2V(prompt string, imageBytes []byte, imageName string, caller Call
 		return err, nil
 	}
 
+	// Имя задачи наружу ДО ожидания: с этой секунды она переживёт смерть бота.
+	caller.jobNamed(id)
+
 	video, err := waitVideoResult(id, caller.Progress)
 	if err != nil {
 		return err, nil

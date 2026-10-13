@@ -204,5 +204,7 @@ func requestImage(prompt string, caller Caller, origin promptOrigin) ([]byte, er
 		return nil, errors.New("wrong response format while getting id")
 	}
 
+	caller.jobNamed(id)
+
 	return waitResult("image", os.Getenv("AI_PAINTER_HOST"), id, imagePollInterval, imageMaxWait, caller.Progress)
 }

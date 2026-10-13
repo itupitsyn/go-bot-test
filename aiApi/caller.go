@@ -28,6 +28,24 @@ type Caller struct {
 	// Progress receives the job's place in the queue on every poll; nil means
 	// the queue is not tracked.
 	Progress ProgressFunc
+	// OnJobID is told the job's name the moment the service has accepted it,
+	// before the wait begins. nil means nobody is interested.
+	//
+	// Нужно это для подбора брошенного. Генерация живёт не в боте: сервис
+	// досчитает её и будет держать результат, даже если бот умрёт посреди
+	// ожидания. Но найти готовое потом можно только по имени, и узнать имя
+	// надо ДО ожидания — иначе как раз в том случае, ради которого всё и
+	// делается, оно останется неизвестным.
+	OnJobID func(id string)
+}
+
+// jobNamed passes the job's name on, if anyone is listening.
+func (c Caller) jobNamed(id string) {
+	if c.OnJobID == nil {
+		return
+	}
+
+	c.OnJobID(id)
 }
 
 // userJSON is the owner for a json request body, leading comma included. It is

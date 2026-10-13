@@ -107,7 +107,16 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		utils.ProcessSendMessageError(botError, chatId)
 	}
 
-	imageBytes, err := aiApi.GetImage(prompt, messageCaller(update.Message, wait))
+	// Расписка о задаче: если процесс умрёт посреди ожидания, следующий
+	// подберёт результат по имени и отдаст сам. Снимается на любом выходе
+	// отсюда, см. pendingNote.
+	note := newPendingNote("image", update.Message, wait, charge)
+	defer note.done()
+
+	caller := messageCaller(update.Message, wait)
+	caller.OnJobID = note.onJobID
+
+	imageBytes, err := aiApi.GetImage(prompt, caller)
 	wait.done()
 	if err != nil {
 		log.Println(err)
@@ -228,7 +237,13 @@ func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wa
 		images = append(images, aiApi.EditImage{Bytes: imageBytes, Name: imageName})
 	}
 
-	imageBytes, err := aiApi.GetImageEdit(prompt, images, messageCaller(update.Message, wait))
+	note := newPendingNote("edit", update.Message, wait, charge)
+	defer note.done()
+
+	caller := messageCaller(update.Message, wait)
+	caller.OnJobID = note.onJobID
+
+	imageBytes, err := aiApi.GetImageEdit(prompt, images, caller)
 	wait.done()
 	if err != nil {
 		log.Println(err)
@@ -321,7 +336,14 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	var videoBytes []byte
 	var err error
 
+	// Вид один на i2v и t2v: подбор спрашивает у сервиса результат по имени, а
+	// чем задача рисовалась, ему знать незачем.
+	note := newPendingNote("video", update.Message, wait, charge)
+	defer note.done()
+
 	caller := messageCaller(update.Message, wait)
+	caller.OnJobID = note.onJobID
+
 	if imageBytes != nil {
 		videoBytes, err = aiApi.GetI2V(prompt, imageBytes, imageName, caller)
 	} else {

@@ -34,6 +34,10 @@ func main() {
 	go bot.StartThumbnailServer(ctx, b)
 	go bot.WatchShutdown(ctx)
 
+	// Сразу, до первого апдейта: предыдущий процесс мог умереть, не отдав
+	// досчитанное. Сервис его досчитал и держит, подобрать можно только нам.
+	go bot.RecoverDeliveries(ctx, b)
+
 	bot.Start(ctx, b)
 
 	// Start возвращается, НЕ дожидаясь обработчиков: внутри ProcessUpdate
@@ -119,6 +123,9 @@ func loadDatabase() {
 	}
 	if err := db.AutoMigrate(&model.AiUsage{}); err != nil {
 		log.Fatal("Error migrating AiUsage", err)
+	}
+	if err := db.AutoMigrate(&model.PendingDelivery{}); err != nil {
+		log.Fatal("Error migrating PendingDelivery", err)
 	}
 	// Снимаем уникальность с users.name. Она осталась от прежней схемы, а
 	// AutoMigrate ограничения не убирает — в модели поле давно объявлено

@@ -25,7 +25,11 @@ jobs:
       - name: Copy single file to remote
         uses: appleboy/scp-action@v0.1.7
         with:
-          source: telebot
+          # Скрипт перезапуска едет вместе с бинарём, а не живёт на сервере:
+          # иначе он разойдётся с кодом, который перезапускает.
+          source: |
+            telebot
+            deploy/restart.sh
           target: go-bot-test
           host: ${{ secrets.SERVER_ADDR }}
           username: ${{ secrets.SERVER_USR }}
@@ -37,6 +41,10 @@ jobs:
           host: ${{ secrets.SERVER_ADDR }}
           username: ${{ secrets.SERVER_USR }}
           password: ${{ secrets.SERVER_PWD }}
+          # Перезапуск идёт через скрипт, а не напрямую: он поднимает
+          # профилактику на время остановки, чтобы новые задачи не встали в
+          # очередь, пока бот дожидается начатых, и возвращает её как было.
+          # Голый `systemctl restart` этого не умел и срезал людей под нагрузкой.
           script: |
-            chmod +rwx go-bot-test/telebot
-            sudo systemctl restart raffle-bot
+            chmod +rwx go-bot-test/telebot go-bot-test/deploy/restart.sh
+            sudo bash go-bot-test/deploy/restart.sh

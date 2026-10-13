@@ -154,5 +154,7 @@ func generateImageEdit(msgText string, images []EditImage, caller Caller) ([]byt
 		return nil, err
 	}
 
+	caller.jobNamed(id)
+
 	return waitResult("edit", os.Getenv("AI_PAINTER_HOST"), id, imagePollInterval, imageMaxWait, caller.Progress)
 }

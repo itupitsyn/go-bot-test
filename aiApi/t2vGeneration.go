@@ -65,6 +65,8 @@ func generateT2V(prompt string, caller Caller) (error, []byte) {
 		return err, nil
 	}
 
+	caller.jobNamed(id)
+
 	video, err := waitVideoResult(id, caller.Progress)
 	if err != nil {
 		return err, nil
