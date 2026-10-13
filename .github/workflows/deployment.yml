@@ -27,9 +27,12 @@ jobs:
         with:
           # Скрипт перезапуска едет вместе с бинарём, а не живёт на сервере:
           # иначе он разойдётся с кодом, который перезапускает.
-          source: |
-            telebot
-            deploy/restart.sh
+          #
+          # Список ЧЕРЕЗ ЗАПЯТУЮ и в одну строку. Блочный `|` здесь не работает:
+          # drone-scp внутри action получает значение одной строкой и ищет файл
+          # с переводом строки в имени. Не находит ничего и падает с
+          # «tar: empty archive» — что и случилось 14.10.2026.
+          source: "telebot,deploy/restart.sh"
           target: go-bot-test
           host: ${{ secrets.SERVER_ADDR }}
           username: ${{ secrets.SERVER_USR }}
