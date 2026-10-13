@@ -31,13 +31,21 @@ var mehaSuffixRu = " меха"
 // The previous ones were Fooocus presets written for SDXL with CFG 5-7, where
 // padding with "quality" tokens (masterpiece, 8k, highly detailed) worked as a
 // lever: it pushed the conditional prediction away from the unconditional one.
-// Now images are drawn by Z-Image Turbo with guidance_scale=0.0: there is no
-// unconditional branch at all, nothing to push apart, and such words turn into
-// ordinary description tokens that dilute what the person actually asked for.
+// Images are now drawn with guidance off, so there is no unconditional branch
+// at all, nothing to push apart, and such words turn into ordinary description
+// tokens that dilute what the person actually asked for.
 //
-// On top of that, Z-Image has an LLM-based text encoder: it reads a coherent
+// The service also uses an LLM-based text encoder, which reads a coherent
 // sentence noticeably better than a comma-separated list. Hence templates
 // written as sentences.
+//
+// Both reasons were first worked out for Z-Image Turbo (guidance_scale=0.0).
+// On 11.10.2026 the service moved to Qwen-Image-2.1-Turbo, where guidance is
+// also effectively off (true_cfg_scale=1 and no negative prompt) and the text
+// encoder is Qwen3-VL — so both reasons still hold. All four templates were
+// re-rendered on the new model with one subject and a fixed seed and hit the
+// brief unchanged, so nothing here was rewritten for the move. If the service
+// ever goes back to a CFG-driven model, this whole block needs revisiting.
 // imageStyle is a named look: the suffixes that turn it on and the template
 // that applies it. Name and template live together on purpose -- the name
 // travels to the service with every request and is what the statistics group

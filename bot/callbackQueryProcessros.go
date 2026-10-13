@@ -227,6 +227,10 @@ func processCallbackQuery(ctx context.Context, b *bot.Bot, update *models.Update
 		if errors.Is(err, aiApi.ErrQueueFull) {
 			text = queueFullText
 		}
+		var refusal *aiApi.RefusalError
+		if errors.As(err, &refusal) && refusal.Category != aiApi.RefusalUnavailable {
+			text = imageRefusalPhrase()
+		}
 		editInlineStatus(ctx, b, inlineMessageId, text)
 	}
 

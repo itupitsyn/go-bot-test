@@ -184,6 +184,8 @@ func checkSubmitStatus(kind string, statusCode int, body []byte) error {
 		return fmt.Errorf("%s: %w", kind, ErrQueueFull)
 	case http.StatusUnauthorized:
 		return fmt.Errorf("%s: %w", kind, ErrUnauthorized)
+	case refusalStatus:
+		return fmt.Errorf("%s: %w", kind, parseRefusal(body))
 	default:
 		return fmt.Errorf("%s request failed with status %d: %s", kind, statusCode, string(body))
 	}

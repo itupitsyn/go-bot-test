@@ -102,6 +102,19 @@ const keepIdentity = ", keep the same person, do not change their face, hair, " 
 // person. The model reframes instead — the figure comes out smaller and lower,
 // which inflates any measurement while the pose stays the same. Only a
 // concrete, named pose moves the body.
+//
+// CAREFUL, the numbers above are from Qwen-Image-Edit-2511. On 11.10.2026 the
+// service moved its editing to Qwen-Image-2.1-Turbo, and the split between
+// these two wordings stopped paying for itself: measured the same way (mean
+// change of the lower half of the frame against the source, two emotions, one
+// photo, fixed seed) the strict wording gives 31.3 and 29.4 of 255, "wearing
+// the same clothes" 31.4 and 29.2, and an explicit ban on undressing 30.7 and
+// 29.0. In other words the pack no longer freezes on the strict wording — the
+// 3.1 that justified this second constant is gone.
+//
+// Left as it is on purpose: two emotions on one photo are thin grounds for
+// deleting a production prompt. If someone collapses them back into one
+// constant, re-measure on a real pack first.
 const keepIdentityPosed = ", keep the same person: same face, same hair, " +
 	"same skin tone, wearing the same clothes, same lighting"
 

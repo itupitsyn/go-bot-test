@@ -34,6 +34,13 @@ const (
 	// queueFullText: the person already has as many jobs as the service takes
 	// from one person at a time. Not a failure, hence the different words.
 	queueFullText = "Не суетим, очередь подзабилась"
+	// imageRefusalText: the content filter declined the request. Neither a
+	// failure nor a queue problem, so it gets its own words. This is the
+	// FALLBACK: the wording is normally taken from the admin panel by the
+	// image_refusal phrase key, and this constant only covers the case where
+	// nobody has filled it in (or the database is unreachable). A refusal we
+	// cannot phrase must not come out as "server died".
+	imageRefusalText = "Извините, с таким контентом я не работаю."
 	// fileTooBigText: Telegram does not give bots files larger than 20 MB (2 GB
 	// with our own bot-api). Not a failure either: retrying is useless, the
 	// file will stay the same.
