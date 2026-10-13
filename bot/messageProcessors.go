@@ -118,27 +118,40 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		return
 	}
 
-	photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
-	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
-		ChatID:    chatId,
-		MessageID: wait.id(),
-	})
-
-	_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
-		ChatID: chatId,
-		Media:  []models.InputMedia{photo},
-		ReplyParameters: &models.ReplyParameters{
-			MessageID: update.Message.ID,
-		},
+	// Параметры собираются ВНУТРИ замыкания: повтору нужен свежий читатель,
+	// иначе второй попыткой уйдёт пустота. Подробности в deliver.
+	_, err = deliver(ctx, "картинку", func() ([]*models.Message, error) {
+		return b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
+			ChatID: chatId,
+			Media: []models.InputMedia{&models.InputMediaPhoto{
+				Media:           "attach://image.png",
+				MediaAttachment: bytes.NewReader(imageBytes),
+				HasSpoiler:      true,
+			}},
+			ReplyParameters: &models.ReplyParameters{
+				MessageID: update.Message.ID,
+			},
+		})
 	})
 
 	if err != nil {
 		// Картинка нарисована, но человек её не увидел. Для него это то же
 		// самое, что не нарисована, — возвращаем.
+		utils.ProcessSendMessageError(err, chatId)
 		charge.setUnits(0)
 		processImgGenerationError(serverDeadText)
+
+		return
 	}
-	utils.ProcessSendMessageError(err, chatId)
+
+	// Ждущее сообщение убираем только ТЕПЕРЬ, после удачной отправки. Раньше
+	// удаление стояло до неё, и когда отправка падала, сообщение об ошибке
+	// правило уже удалённое: человек не получал ни картинки, ни слов. Так и
+	// вышло 13.10.2026, когда подтормаживал прокси.
+	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+		ChatID:    chatId,
+		MessageID: wait.id(),
+	})
 }
 
 // editPhotos collects the images to edit: first the one being replied to, then
@@ -225,25 +238,32 @@ func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wa
 		return
 	}
 
-	photo := &models.InputMediaPhoto{Media: "attach://image.png", MediaAttachment: bytes.NewReader(imageBytes), HasSpoiler: true}
+	_, err = deliver(ctx, "правку", func() ([]*models.Message, error) {
+		return b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
+			ChatID: chatId,
+			Media: []models.InputMedia{&models.InputMediaPhoto{
+				Media:           "attach://image.png",
+				MediaAttachment: bytes.NewReader(imageBytes),
+				HasSpoiler:      true,
+			}},
+			ReplyParameters: &models.ReplyParameters{
+				MessageID: update.Message.ID,
+			},
+		})
+	})
+
+	if err != nil {
+		utils.ProcessSendMessageError(err, chatId)
+		charge.setUnits(0)
+		processEditError(serverDeadText)
+
+		return
+	}
+
 	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
 		ChatID:    chatId,
 		MessageID: wait.id(),
 	})
-
-	_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
-		ChatID: chatId,
-		Media:  []models.InputMedia{photo},
-		ReplyParameters: &models.ReplyParameters{
-			MessageID: update.Message.ID,
-		},
-	})
-
-	if err != nil {
-		charge.setUnits(0)
-		processEditError(serverDeadText)
-	}
-	utils.ProcessSendMessageError(err, chatId)
 }
 
 func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, charge *aiCharge) {
@@ -317,26 +337,34 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		return
 	}
 
-	video := &models.InputMediaVideo{Media: "attach://image.mp4", MediaAttachment: bytes.NewReader(videoBytes), HasSpoiler: true}
+	// Видео повторить дороже всего: за ним двести секунд видеокарты, которых
+	// не вернуть, и байты уже лежат в памяти целиком.
+	_, err = deliver(ctx, "видео", func() ([]*models.Message, error) {
+		return b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
+			ChatID: chatId,
+			Media: []models.InputMedia{&models.InputMediaVideo{
+				Media:           "attach://image.mp4",
+				MediaAttachment: bytes.NewReader(videoBytes),
+				HasSpoiler:      true,
+			}},
+			ReplyParameters: &models.ReplyParameters{
+				MessageID: update.Message.ID,
+			},
+		})
+	})
+
+	if err != nil {
+		utils.ProcessSendMessageError(err, chatId)
+		charge.setUnits(0)
+		processVideoGenerationError("")
+
+		return
+	}
 
 	b.DeleteMessage(ctx, &bot.DeleteMessageParams{
 		ChatID:    chatId,
 		MessageID: wait.id(),
 	})
-
-	_, err = b.SendMediaGroup(ctx, &bot.SendMediaGroupParams{
-		ChatID: chatId,
-		Media:  []models.InputMedia{video},
-		ReplyParameters: &models.ReplyParameters{
-			MessageID: update.Message.ID,
-		},
-	})
-
-	if err != nil {
-		charge.setUnits(0)
-		processVideoGenerationError("")
-	}
-	utils.ProcessSendMessageError(err, chatId)
 }
 
 // telegramTextLimit is the longest text Telegram accepts in a single message.

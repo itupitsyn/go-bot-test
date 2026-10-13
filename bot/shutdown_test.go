@@ -44,24 +44,55 @@ func TestDetachedContextSurvivesCancelledParent(t *testing.T) {
 	}
 }
 
-// «Переживает отмену» не должно означать «живёт вечно»: у отвязанного
-// контекста обязан быть свой срок, иначе зависший обработчик держал бы
-// перезапуск бесконечно.
-func TestDetachedContextStillHasDeadline(t *testing.T) {
+// Пока бот работает, у обработчика НЕ ДОЛЖНО быть потолка. Здесь стоял
+// WithTimeout от начала обработки, и при глубокой очереди (видео считается
+// дольше пяти минут) контекст умирал посреди работы, обрывая выдачу. Этот тест
+// — про тот самый случай, и он нарочно живёт дольше отсрочки.
+func TestDetachedContextHasNoCapWhileParentAlive(t *testing.T) {
 	t.Setenv("BOT_HANDLER_GRACE_SECONDS", "1")
 
-	var deadline time.Time
-	var ok bool
+	var capped bool
+	var errAfterGraceWorth error
 	handler := detachFromShutdown(func(ctx context.Context, _ *bot.Bot, _ *models.Update) {
-		deadline, ok = ctx.Deadline()
+		_, capped = ctx.Deadline()
+		time.Sleep(1300 * time.Millisecond) // дольше, чем отсрочка
+		errAfterGraceWorth = ctx.Err()
 	})
 	handler(context.Background(), nil, nil)
 
-	if !ok {
-		t.Fatal("у отвязанного контекста нет срока — он бессмертен")
+	if capped {
+		t.Error("на штатной обработке стоит потолок — он оборвёт долгую очередь")
 	}
-	if left := time.Until(deadline); left <= 0 || left > 2*time.Second {
-		t.Errorf("срок странный: осталось %v, ожидалось около секунды", left)
+	if errAfterGraceWorth != nil {
+		t.Errorf("контекст умер сам, без сигнала: %v", errAfterGraceWorth)
+	}
+}
+
+// А вот после сигнала срок обязан включиться — иначе зависший обработчик
+// держал бы перезапуск бесконечно. И не раньше сигнала: сразу после него
+// контекст ещё должен быть жив, на нём держится выдача результата.
+func TestDetachedContextDiesAfterSignalGrace(t *testing.T) {
+	t.Setenv("BOT_HANDLER_GRACE_SECONDS", "1")
+
+	parent, signal := context.WithCancel(context.Background())
+	defer signal()
+
+	var aliveRightAfterSignal bool
+	var errAfterGrace error
+	handler := detachFromShutdown(func(ctx context.Context, _ *bot.Bot, _ *models.Update) {
+		signal() // сигнал пришёл посреди работы
+		time.Sleep(200 * time.Millisecond)
+		aliveRightAfterSignal = ctx.Err() == nil
+		time.Sleep(1300 * time.Millisecond)
+		errAfterGrace = ctx.Err()
+	})
+	handler(parent, nil, nil)
+
+	if !aliveRightAfterSignal {
+		t.Error("контекст умер сразу по сигналу — результат отдать будет нечем")
+	}
+	if errAfterGrace == nil {
+		t.Error("отсрочка прошла, а контекст жив — обработчик бессмертен")
 	}
 }
 

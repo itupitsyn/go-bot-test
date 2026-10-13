@@ -15,9 +15,6 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
-// inlineUploadAttempts is how many times the generated media is pushed to the
-// service chat before giving up.
-const inlineUploadAttempts = 3
 
 // ignoreInlineEditResponse drops the error every successful edit of an inline
 // message produces. Telegram answers such an edit with "true" instead of the
@@ -48,28 +45,30 @@ func editInlineStatus(ctx context.Context, b *bot.Bot, inlineMessageId string, t
 // uploadToServiceChat parks generated media in the service chat to get a file id
 // out of it: editing an inline message cannot upload anything, it only accepts a
 // file id Telegram already knows or a URL.
-func uploadToServiceChat(send func() (*models.Message, error)) (*models.Message, error) {
-	var err error
-	for i := 0; i < inlineUploadAttempts; i++ {
-		var res *models.Message
-		res, err = send()
-		if err == nil {
-			return res, nil
-		}
-		log.Println(err)
-	}
-
-	return nil, err
+//
+// Повтор здесь был свой и бил три раза подряд без паузы, не глядя ни на причину
+// отказа, ни на контекст. Теперь это общий deliver: он выжидает между
+// попытками, слушает retry_after и не долбится в отказ, который Telegram уже
+// объяснил.
+func uploadToServiceChat(ctx context.Context, send func() (*models.Message, error)) (*models.Message, error) {
+	return deliver(ctx, "загрузку в служебный чат", send)
 }
 
 // replaceInlineMedia swaps the inline message for the generated media and then
 // removes the copy in the service chat it was uploaded through.
 func replaceInlineMedia(ctx context.Context, b *bot.Bot, inlineMessageId string, media models.InputMedia, uploaded *models.Message) error {
-	_, err := b.EditMessageMedia(ctx, &bot.EditMessageMediaParams{
-		InlineMessageID: inlineMessageId,
-		Media:           media,
+	_, err := deliver(ctx, "инлайн-результат", func() (*models.Message, error) {
+		msg, err := b.EditMessageMedia(ctx, &bot.EditMessageMediaParams{
+			InlineMessageID: inlineMessageId,
+			Media:           media,
+		})
+
+		// Гасим ответ на удачную правку ЗДЕСЬ, внутри попытки: иначе deliver
+		// принял бы успех за ошибку и повторял бы его, пока не кончатся
+		// попытки. Подробности в ignoreInlineEditResponse.
+		return msg, ignoreInlineEditResponse(err)
 	})
-	if err := ignoreInlineEditResponse(err); err != nil {
+	if err != nil {
 		return fmt.Errorf("editing inline message: %w", err)
 	}
 
@@ -97,7 +96,7 @@ func generateInlineImage(ctx context.Context, b *bot.Bot, inlineMessageId string
 		return fmt.Errorf("generating image: %w", err)
 	}
 
-	uploaded, err := uploadToServiceChat(func() (*models.Message, error) {
+	uploaded, err := uploadToServiceChat(ctx, func() (*models.Message, error) {
 		return b.SendPhoto(ctx, &bot.SendPhotoParams{
 			ChatID: os.Getenv("TMP_CHAT_ID"),
 			Photo:  &models.InputFileUpload{Filename: "photo", Data: bytes.NewReader(imageBytes)},
@@ -137,7 +136,7 @@ func uploadedVideoMedia(uploaded *models.Message, caption string) models.InputMe
 // putInlineVideo parks the generated video in the service chat and swaps the
 // inline message for it.
 func putInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, videoBytes []byte, caption string) error {
-	uploaded, err := uploadToServiceChat(func() (*models.Message, error) {
+	uploaded, err := uploadToServiceChat(ctx, func() (*models.Message, error) {
 		return b.SendVideo(ctx, &bot.SendVideoParams{
 			ChatID: os.Getenv("TMP_CHAT_ID"),
 			Video:  &models.InputFileUpload{Filename: "video.mp4", Data: bytes.NewReader(videoBytes)},
