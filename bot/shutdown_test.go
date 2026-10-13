@@ -155,3 +155,45 @@ func TestWatchShutdownReturnsOnSignal(t *testing.T) {
 		t.Error("WatchShutdown не вернулся после отмены")
 	}
 }
+
+// Ради этого всё и делалось: завершение обязано ДОЖДАТЬСЯ работающего
+// обработчика. Проверка 13.10.2026 показала, что без своего ожидания процесс
+// выходит мгновенно — библиотека уводит обработчик в отдельную горутину и
+// Start его не ждёт.
+func TestWaitForHandlersWaitsForRunningOne(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{})
+
+	handler := trackInFlight(func(_ context.Context, _ *bot.Bot, _ *models.Update) {
+		close(started)
+		<-release
+	})
+	go handler(context.Background(), nil, nil)
+	<-started
+
+	// Пока обработчик держится, ждать нас обязано и сдаться по сроку.
+	left, ok := WaitForHandlers(300 * time.Millisecond)
+	if ok {
+		t.Error("вернулось «всё чисто», хотя обработчик ещё работает")
+	}
+	if left != 1 {
+		t.Errorf("сообщило о %d работающих, ожидалась единица", left)
+	}
+
+	// А как отпустим — должно дождаться и сказать, что чисто.
+	close(release)
+	if left, ok := WaitForHandlers(2 * time.Second); !ok || left != 0 {
+		t.Errorf("после завершения дало (%d, %v), ожидалось (0, true)", left, ok)
+	}
+}
+
+func TestWaitForHandlersReturnsAtOnceWhenIdle(t *testing.T) {
+	start := time.Now()
+	left, ok := WaitForHandlers(5 * time.Second)
+	if !ok || left != 0 {
+		t.Errorf("на простое дало (%d, %v), ожидалось (0, true)", left, ok)
+	}
+	if spent := time.Since(start); spent > time.Second {
+		t.Errorf("на простое потратило %v — должно возвращаться сразу", spent)
+	}
+}

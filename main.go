@@ -34,11 +34,18 @@ func main() {
 	go bot.StartThumbnailServer(ctx, b)
 	go bot.WatchShutdown(ctx)
 
-	// Start возвращается только после того, как доживут начатые
-	// обработчики: рабочая горутина библиотеки вызывает их синхронно,
-	// а Start ждёт все свои горутины.
 	bot.Start(ctx, b)
-	log.Println("Stopped cleanly, nothing left in flight")
+
+	// Start возвращается, НЕ дожидаясь обработчиков: внутри ProcessUpdate
+	// библиотека уводит каждый в отдельную горутину. Если выйти здесь, процесс
+	// завершится и оборвёт чужую генерацию вместе со списанной оплатой —
+	// именно это и случилось на проверке 13.10.2026 в 22:04.
+	if left, ok := bot.WaitForHandlers(bot.HandlerGrace()); ok {
+		log.Println("Stopped cleanly, nothing left in flight")
+	} else {
+		log.Printf("Giving up after %s, %d handler(s) still running\n",
+			bot.HandlerGrace(), left)
+	}
 }
 
 func loadEnv() {
