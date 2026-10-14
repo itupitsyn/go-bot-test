@@ -30,10 +30,20 @@ type PendingDelivery struct {
 	// подбор знает, какой сервис спрашивать и чем отдавать результат.
 	Kind string `gorm:"not null"`
 	// ChatID, ReplyToID, WaitID — куда отдавать: чат, сообщение-вопрос и
-	// ждущее сообщение, которое надо убрать после выдачи.
-	ChatID    int64 `gorm:"not null"`
+	// ждущее сообщение, которое надо убрать после выдачи. Ноль во всех трёх
+	// означает инлайн-задачу: у неё места доставки в этом смысле нет.
+	ChatID    int64
 	ReplyToID int
 	WaitID    int
+	// InlineMessageID — сообщение, вставленное инлайн-режимом в чужой чат.
+	// Непустое значение означает, что отдавать надо правкой этого сообщения, а
+	// не отправкой в чат: чат Telegram нам не называет вовсе. Идентификатор
+	// остаётся годным и через часы, поэтому подобрать такую задачу можно.
+	InlineMessageID string
+	// Caption — исходный запрос, подпись к инлайн-результату. Хранится только
+	// ради неё: в чужом чате под картинкой должно быть видно, что просили.
+	// Живёт столько же, сколько строка, то есть минуты.
+	Caption string
 	// UserID и PaidUnits — чтобы вернуть деньги, когда задача потеряна
 	// окончательно. Платные единицы хранятся числом, а не ссылкой на строку
 	// списания: возврат идёт через AddAiCredit, которому нужен только счёт.
@@ -57,6 +67,23 @@ func RememberDelivery(delivery PendingDelivery) error {
 	}
 
 	return db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&delivery).Error
+}
+
+// RenameDelivery gives a job the name the service chose for it. Reports whether
+// there was a row to rename at all.
+//
+// Переименование, а не вставка новой строки: расписка уже существует — она
+// пишется до отправки на сервис, пока имени ещё нет, — и вторая строка о той
+// же работе означала бы двойной возврат денег.
+func RenameDelivery(from, to string) (bool, error) {
+	res := db.Model(&PendingDelivery{}).
+		Where("job_id = ?", from).
+		Update("job_id", to)
+	if res.Error != nil {
+		return false, res.Error
+	}
+
+	return res.RowsAffected > 0, nil
 }
 
 // ForgetDelivery removes the record: the work is handed over, or lost for good.

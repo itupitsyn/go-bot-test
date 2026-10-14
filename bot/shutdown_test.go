@@ -25,9 +25,8 @@ func TestDetachedContextSurvivesCancelledParent(t *testing.T) {
 	// когда писал тест первым заходом.
 	var called bool
 	var errInside error
-	var got context.Context
 	handler := detachFromShutdown(func(ctx context.Context, _ *bot.Bot, _ *models.Update) {
-		called, errInside, got = true, ctx.Err(), ctx
+		called, errInside = true, ctx.Err()
 	})
 	handler(dead, nil, nil)
 
@@ -37,10 +36,23 @@ func TestDetachedContextSurvivesCancelledParent(t *testing.T) {
 	if errInside != nil {
 		t.Errorf("обработчик получил мёртвый контекст: %v", errInside)
 	}
-	// И обратное: после возврата контекст обязан быть закрыт, иначе каждая
-	// обработка оставляла бы за собой живой таймер.
-	if got.Err() == nil {
-		t.Error("после возврата контекст не закрыт — утечка")
+}
+
+// Контекст обязан пережить ВОЗВРАТ обработчика: часть ответов бот нарочно
+// оставляет работать после себя — `go utils.SendPhrazes` спит между фразами и
+// отправляет первую уже после возврата. Здесь стоял `defer cancel()`, и из-за
+// него установка приза молчала больше половины суток: Telegram отвечал «context
+// canceled» в ту же секунду. Тест стоит ровно на том месте, где раньше стояло
+// утверждение наоборот.
+func TestDetachedContextOutlivesTheHandler(t *testing.T) {
+	var got context.Context
+	handler := detachFromShutdown(func(ctx context.Context, _ *bot.Bot, _ *models.Update) {
+		got = ctx
+	})
+	handler(context.Background(), nil, nil)
+
+	if err := got.Err(); err != nil {
+		t.Errorf("после возврата контекст закрыт (%v) — всё отложенное умрёт вместе с ним", err)
 	}
 }
 

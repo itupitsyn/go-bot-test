@@ -96,6 +96,13 @@ func processParticipation(update *models.Update) {
 func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, charge *aiCharge) {
 	chatId := update.Message.Chat.ID
 
+	// Расписка открывается ПЕРВЫМ делом, до любой работы: списание уже
+	// случилось в refuseAiCommand, и с этой секунды про долг известно базе.
+	// Снимается на любом выходе отсюда, см. pendingNote.
+	note := newPendingNote("image", update.Message, wait, charge)
+	note.open()
+	defer note.done()
+
 	processImgGenerationError := func(text string) {
 		wait.done()
 
@@ -106,12 +113,6 @@ func processImageGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		})
 		utils.ProcessSendMessageError(botError, chatId)
 	}
-
-	// Расписка о задаче: если процесс умрёт посреди ожидания, следующий
-	// подберёт результат по имени и отдаст сам. Снимается на любом выходе
-	// отсюда, см. pendingNote.
-	note := newPendingNote("image", update.Message, wait, charge)
-	defer note.done()
 
 	caller := messageCaller(update.Message, wait)
 	caller.OnJobID = note.onJobID
@@ -209,6 +210,12 @@ func processEditHint(ctx context.Context, b *bot.Bot, update *models.Update) {
 func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, photos []*models.PhotoSize, charge *aiCharge) {
 	chatId := update.Message.Chat.ID
 
+	// До скачивания картинок, а не после: качаются они из Telegram и не всегда
+	// быстро, а списание уже произошло.
+	note := newPendingNote("edit", update.Message, wait, charge)
+	note.open()
+	defer note.done()
+
 	processEditError := func(text string) {
 		wait.done()
 
@@ -236,9 +243,6 @@ func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wa
 		}
 		images = append(images, aiApi.EditImage{Bytes: imageBytes, Name: imageName})
 	}
-
-	note := newPendingNote("edit", update.Message, wait, charge)
-	defer note.done()
 
 	caller := messageCaller(update.Message, wait)
 	caller.OnJobID = note.onJobID
@@ -283,6 +287,12 @@ func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wa
 
 func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, charge *aiCharge) {
 	chatId := update.Message.Chat.ID
+
+	// Вид один на i2v и t2v: подбор спрашивает результат по имени, а чем задача
+	// рисовалась, ему знать незачем. Открываем до скачивания фото.
+	note := newPendingNote("video", update.Message, wait, charge)
+	note.open()
+	defer note.done()
 
 	processVideoGenerationError := func(text string) {
 		wait.done()
@@ -335,11 +345,6 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 
 	var videoBytes []byte
 	var err error
-
-	// Вид один на i2v и t2v: подбор спрашивает у сервиса результат по имени, а
-	// чем задача рисовалась, ему знать незачем.
-	note := newPendingNote("video", update.Message, wait, charge)
-	defer note.done()
 
 	caller := messageCaller(update.Message, wait)
 	caller.OnJobID = note.onJobID

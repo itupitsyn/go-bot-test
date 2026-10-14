@@ -52,13 +52,61 @@ func TestPendingNoteSurvivesMissingSenderAndWait(t *testing.T) {
 	}
 }
 
-// Пока сервис не назвал задачу, снимать нечего — и в базу лезть нельзя: в
-// тесте она не настроена, так что обращение к ней было бы паникой. Это и
-// проверяем: отсутствие имени означает отсутствие запроса.
-func TestPendingNoteDoneDoesNothingWithoutJobID(t *testing.T) {
-	note := newPendingNote("video", &models.Message{Chat: models.Chat{ID: 7}}, nil, nil)
+// Расписка открывается ДО того, как сервис назовёт задачу, поэтому имя у неё
+// есть всегда — своё, с меткой. Без этого смерть процесса между списанием и
+// отправкой на сервис теряла деньги без следа.
+func TestPendingNoteIsNamedBeforeTheServiceNamesIt(t *testing.T) {
+	message := &models.Message{ID: 1, Chat: models.Chat{ID: 7}, From: &models.User{ID: 42}}
 
-	note.done()
+	note := newPendingNote("video", message, nil, nil)
+
+	if note.row.JobID == "" {
+		t.Fatal("расписка без имени — её нечем будет ни найти, ни снять")
+	}
+	if !isUnnamed(note.row.JobID) {
+		t.Errorf("имя %q не помечено как ещё не данное сервисом", note.row.JobID)
+	}
+	if note.id != note.row.JobID {
+		t.Error("расписка и строка разошлись в имени")
+	}
+
+	// Два запроса подряд не должны получить одно имя: иначе второй перетрёт
+	// первый и один из людей останется без результата и без возврата.
+	other := newPendingNote("video", message, nil, nil)
+	if other.row.JobID == note.row.JobID {
+		t.Error("две задачи получили одно имя")
+	}
+}
+
+// Настоящее имя должно вытеснять временное, а не добавляться рядом.
+func TestIsUnnamedTellsTheNamesApart(t *testing.T) {
+	if !isUnnamed(unnamedJob(42)) {
+		t.Error("своё имя не распознано как временное")
+	}
+	if isUnnamed("faba1ce1-243f-431b-be71-ff7fc135c782") {
+		t.Error("имя от сервиса принято за временное — такую задачу не подберут")
+	}
+}
+
+// Инлайн-задача: ни чата, ни сообщения-вопроса, зато есть инлайн-сообщение и
+// подпись. Денег на этом пути нет вовсе, возвращать нечего.
+func TestInlinePendingNoteKeepsWhereToEdit(t *testing.T) {
+	note := newInlinePendingNote("video", "inline-77", 42, "кот в сапогах")
+
+	switch {
+	case note.row.InlineMessageID != "inline-77":
+		t.Errorf("инлайн-сообщение %q", note.row.InlineMessageID)
+	case note.row.Caption != "кот в сапогах":
+		t.Errorf("подпись %q", note.row.Caption)
+	case note.row.ChatID != 0:
+		t.Errorf("чат %d, а Telegram его не называет вовсе", note.row.ChatID)
+	case note.row.UserID != 42:
+		t.Errorf("пользователь %d", note.row.UserID)
+	case note.row.PaidUnits != 0:
+		t.Errorf("платных единиц %d, а инлайн ничего не списывает", note.row.PaidUnits)
+	case !isUnnamed(note.row.JobID):
+		t.Error("инлайн-расписка открылась без метки")
+	}
 }
 
 // Деньги без строки списания — ноль, а не паника: у человека без лимита

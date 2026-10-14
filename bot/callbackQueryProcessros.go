@@ -89,8 +89,18 @@ func replaceInlineMedia(ctx context.Context, b *bot.Bot, inlineMessageId string,
 // generateInlineImage draws the picture asked for by an inline query and puts it
 // into the message the button was pressed in.
 func generateInlineImage(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData, userID int64) error {
+	// Расписка и здесь: инлайн-путь ничего не списывает, зато результат такой
+	// же настоящий, и терять его так же обидно. Отдавать его потом можно
+	// правкой того же инлайн-сообщения, см. handOverInline.
+	note := newInlinePendingNote("image", inlineMessageId, userID, queryData.query)
+	note.open()
+	defer note.done()
+
 	wait := newInlineWaitMessage(ctx, b, inlineMessageId)
-	imageBytes, err := aiApi.GetImage(queryData.query, inlineCaller(userID, wait))
+	caller := inlineCaller(userID, wait)
+	caller.OnJobID = note.onJobID
+
+	imageBytes, err := aiApi.GetImage(queryData.query, caller)
 	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating image: %w", err)
@@ -157,8 +167,15 @@ func putInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, vid
 // generateInlineTextVideo animates the words of the inline query, with no
 // picture to start from.
 func generateInlineTextVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData, userID int64) error {
+	note := newInlinePendingNote("video", inlineMessageId, userID, queryData.query)
+	note.open()
+	defer note.done()
+
 	wait := newInlineWaitMessage(ctx, b, inlineMessageId)
-	videoBytes, err := aiApi.GetT2V(queryData.query, inlineCaller(userID, wait))
+	caller := inlineCaller(userID, wait)
+	caller.OnJobID = note.onJobID
+
+	videoBytes, err := aiApi.GetT2V(queryData.query, caller)
 	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating t2v: %w", err)
@@ -170,6 +187,11 @@ func generateInlineTextVideo(ctx context.Context, b *bot.Bot, inlineMessageId st
 // generateInlineVideo animates the picture behind the pressed button and puts
 // the result into the message the picture was posted in.
 func generateInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string, queryData callbackQueryData, userID int64) error {
+	// До скачивания картинки: качается она из Telegram и не всегда быстро.
+	note := newInlinePendingNote("video", inlineMessageId, userID, queryData.query)
+	note.open()
+	defer note.done()
+
 	imageBytes, imageName, err := downloadTelegramFile(ctx, b, queryData.fileID)
 	if err != nil {
 		// Telegram no longer serves the picture, so it should stop being
@@ -186,7 +208,10 @@ func generateInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string
 	}
 
 	wait := newInlineWaitMessage(ctx, b, inlineMessageId)
-	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imageName, inlineCaller(userID, wait))
+	caller := inlineCaller(userID, wait)
+	caller.OnJobID = note.onJobID
+
+	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imageName, caller)
 	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating i2v: %w", err)

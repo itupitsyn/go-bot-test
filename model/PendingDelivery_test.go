@@ -54,8 +54,10 @@ func TestRememberDeliveryStampsTheTime(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO "pending_deliveries"`).
+		// Столбцов девять плюс время последним, в порядке полей структуры.
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
-			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), recentTime{}).
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(), recentTime{}).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
@@ -112,6 +114,54 @@ func TestOwedDeliveriesComeOldestFirst(t *testing.T) {
 	}
 	if owed[0].PaidUnits != 1 || owed[1].PaidUnits != 0 {
 		t.Errorf("платные единицы не доехали: %d и %d", owed[0].PaidUnits, owed[1].PaidUnits)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// Переименование: расписка существует до отправки на сервис, под нашим
+// собственным именем, и настоящее имя подставляется в неё, а не создаёт вторую
+// строку. Вторая означала бы двойной возврат денег.
+func TestRenameDeliverySwitchesTheName(t *testing.T) {
+	db, mock := database.ConnectToMockDB()
+	Init(db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "pending_deliveries" SET "job_id"=\$1 WHERE job_id = \$2`).
+		WithArgs("faba1ce1", "unnamed:42:17").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	switched, err := RenameDelivery("unnamed:42:17", "faba1ce1")
+	if err != nil {
+		t.Fatalf("неожиданная ошибка: %v", err)
+	}
+	if !switched {
+		t.Error("сказало, что строки не было, хотя обновило одну")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// Если строки не было — об этом надо сказать, а не промолчать: иначе задача
+// останется без настоящего имени и подобрать её будет нельзя.
+func TestRenameDeliveryReportsAMissingRow(t *testing.T) {
+	db, mock := database.ConnectToMockDB()
+	Init(db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "pending_deliveries" SET "job_id"=\$1`).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	switched, err := RenameDelivery("unnamed:42:17", "faba1ce1")
+	if err != nil {
+		t.Fatalf("неожиданная ошибка: %v", err)
+	}
+	if switched {
+		t.Error("сказало, что переименовало, хотя строк не тронуто")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
