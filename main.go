@@ -11,6 +11,7 @@ import (
 	"telebot/bot"
 	"telebot/database"
 	"telebot/model"
+	"telebot/utils"
 
 	"telebot/raffleLogic"
 
@@ -19,6 +20,12 @@ import (
 
 func main() {
 	loadEnv()
+
+	// Сразу после окружения и до первого обращения к Telegram: библиотека
+	// печатает полный URL при каждой неудаче, а в URL Telegram токен и есть
+	// путь. Подробности в utils/secrets.go.
+	utils.HideSecretsInLogs()
+
 	loadDatabase()
 
 	// SIGTERM обязателен: его посылает `docker stop`, и без него процесс

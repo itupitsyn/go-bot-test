@@ -10,8 +10,8 @@ import (
 //
 // It exists purely for statistics and changes nothing about generation. The
 // service only ever sees the finished prompt -- cut down to the subject,
-// translated into English and wrapped in a template -- and from that there is
-// no way back to the original request. Collected without the pair, the prompts
+// wrapped in a template, and for images translated into English -- and from
+// that there is no way back to the original request. Collected without the pair, the prompts
 // are a corpus of machine text: useless for building test cases when a new
 // model shows up, which is the whole reason for keeping them.
 //
