@@ -146,7 +146,7 @@ func getHandler() bot.HandlerFunc {
 					if charge, refused := refuseAiCommand(ctx, b, update.Message, aiKindVideo); !refused {
 						wait := sendWaitMessage(chatId, update.Message.ID)
 						processVideoGeneration(ctx, b, update, wait,
-							buildAiPrompt(update.Message, "анимируй", "animate"), charge)
+							buildAnimationPrompt(update.Message, "анимируй", "animate"), charge)
 					}
 				}
 			} else if isCommand(msgTextLower, "расшифруй", "transcribe") {

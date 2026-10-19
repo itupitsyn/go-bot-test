@@ -14,6 +14,10 @@ import (
 // sound come from the video template around it.
 const defaultAnimationPrompt = "the scene in the picture comes to life"
 
+// quotationMarks lists the marks that ask the video model for a spoken line
+// (speechQuotes in the aiApi package).
+const quotationMarks = `«»"“”„`
+
 // isCommandSeparator reports whether the rune ends the keyword. It is not just
 // a space: "анимируй, котика" and "нарисуй: котика" are commands too, people
 // type them with a comma or a colon without thinking.
@@ -42,6 +46,14 @@ func isCommand(text string, keywords ...string) bool {
 	return false
 }
 
+// isPromptBorder reports whether the rune did nothing but separate the command
+// from the prompt and can be dropped along with the keyword. A quotation mark
+// does more than separate: it marks the words to be spoken aloud, so "анимируй
+// «привет, это я»" has to keep it and ask for a line, not animate the words.
+func isPromptBorder(r rune) bool {
+	return isCommandSeparator(r) && !strings.ContainsRune(quotationMarks, r)
+}
+
 // getMessageText returns the text of a message, falling back to the caption of
 // a media message.
 func getMessageText(message *models.Message) string {
@@ -58,6 +70,23 @@ func getMessageText(message *models.Message) string {
 // аниме" sent in reply to "котик на подоконнике" gives the prompt "котик на
 // подоконнике аниме".
 func buildAiPrompt(message *models.Message, keywords ...string) string {
+	return joinPrompt(replyPrompt(message), commandPrompt(message, keywords...))
+}
+
+// buildAnimationPrompt does the same for the animator, with one difference: the
+// text being replied to goes in as a description of the scene and nothing else.
+// Quotation marks in it are an ordinary quotation — it is somebody else's
+// message, and whoever wrote it was not asking for words to be said out loud.
+// Asking for a line stays with the person typing the command.
+func buildAnimationPrompt(message *models.Message, keywords ...string) string {
+	scene := dropQuotationMarks(replyPrompt(message))
+
+	return joinPrompt(scene, commandPrompt(message, keywords...))
+}
+
+// commandPrompt returns what is left of the command message once the keyword is
+// cut off.
+func commandPrompt(message *models.Message, keywords ...string) string {
 	prompt := getMessageText(message)
 	for _, keyword := range keywords {
 		prompt = utils.TrimPrefixIgnoreCase(prompt, keyword)
@@ -65,17 +94,45 @@ func buildAiPrompt(message *models.Message, keywords ...string) string {
 	// The punctuation mark that separated the prompt is not needed in the
 	// prompt itself: "анимируй, котика" must send "котика" to the service, not
 	// ", котика".
-	prompt = strings.TrimLeftFunc(prompt, isCommandSeparator)
-	prompt = strings.TrimSpace(prompt)
+	prompt = strings.TrimLeftFunc(prompt, isPromptBorder)
 
+	return strings.TrimSpace(prompt)
+}
+
+// replyPrompt returns the text of the message being replied to. The caption of
+// a media message is not taken: a reply to a photo is about the photo, and the
+// caption under it is usually a remark of its own.
+func replyPrompt(message *models.Message) string {
 	if reply := message.ReplyToMessage; reply != nil {
-		replyText := strings.TrimSpace(reply.Text)
-		if replyText != "" {
-			prompt = strings.TrimSpace(replyText + " " + prompt)
-		}
+		return strings.TrimSpace(reply.Text)
 	}
 
-	return prompt
+	return ""
+}
+
+// joinPrompt puts the two halves of the prompt together: the text being replied
+// to first, what was typed with the command after it.
+func joinPrompt(reply, command string) string {
+	if reply == "" {
+		return command
+	}
+
+	return strings.TrimSpace(reply + " " + command)
+}
+
+// dropQuotationMarks takes the quotation marks out of the text, leaving the
+// words themselves in place. A space takes the place of every mark so that
+// nothing sticks together.
+func dropQuotationMarks(text string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		if strings.ContainsRune(quotationMarks, r) {
+			return ' '
+		}
+
+		return r
+	}, text)
+
+	return strings.Join(strings.Fields(cleaned), " ")
 }
 
 // isBareCommand reports whether the already lowercased text is nothing but one
