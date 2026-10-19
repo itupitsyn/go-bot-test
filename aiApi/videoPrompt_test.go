@@ -199,6 +199,175 @@ func TestBuildVideoPromptTranslatesWhenTurnedOn(t *testing.T) {
 	}
 }
 
+func TestSplitSpeechTakesTheLinesOut(t *testing.T) {
+	cases := []struct {
+		text  string
+		scene string
+		lines []string
+	}{
+		{`мужика в метро «я опять опоздал»`, "мужика в метро", []string{"я опять опоздал"}},
+		{`мужика в метро "я опять опоздал"`, "мужика в метро", []string{"я опять опоздал"}},
+		{"мужика в метро “я опять опоздал”", "мужика в метро", []string{"я опять опоздал"}},
+		{"мужика в метро „я опять опоздал“", "мужика в метро", []string{"я опять опоздал"}},
+		// The line may stand anywhere, and the words around it stay the scene.
+		{`кот «мяу» на диване`, "кот на диване", []string{"мяу"}},
+		// Two lines are two lines, in the order written.
+		{`спор «ты кто» «я сам кто»`, "спор", []string{"ты кто", "я сам кто"}},
+		// Nothing quoted at all: everything is the scene.
+		{"танцующего кота", "танцующего кота", []string{}},
+		// Empty quotes are not a line.
+		{`кота «»`, "кота", []string{}},
+	}
+
+	for _, c := range cases {
+		scene, lines := splitSpeech(c.text)
+		if scene != c.scene {
+			t.Errorf("splitSpeech(%q): сцена %q, ждали %q", c.text, scene, c.scene)
+		}
+		if strings.Join(lines, "|") != strings.Join(c.lines, "|") {
+			t.Errorf("splitSpeech(%q): реплики %q, ждали %q", c.text, lines, c.lines)
+		}
+	}
+}
+
+// TestSplitSpeechLeavesAnUnpairedQuoteAlone: a forgotten closing quote must not
+// turn the rest of the request into a line. Otherwise a typo produces a video
+// of someone reading the request out loud -- the very thing being fixed here.
+func TestSplitSpeechLeavesAnUnpairedQuoteAlone(t *testing.T) {
+	scene, lines := splitSpeech(`кота «на подоконнике`)
+
+	if len(lines) != 0 {
+		t.Errorf("непарная кавычка стала репликой: %q", lines)
+	}
+	if scene != `кота «на подоконнике` {
+		t.Errorf("сцена пострадала: %q", scene)
+	}
+}
+
+// TestSplitSpeechStripsModelMarkers: the dialogue markers are ours, not the
+// person's. Typed by hand they must not reach the model as control tokens.
+func TestSplitSpeechStripsModelMarkers(t *testing.T) {
+	scene, lines := splitSpeech(`кота <d>сам себе</d> «мяу» <|cutoff|>`)
+
+	if strings.Contains(scene, "<d>") || strings.Contains(scene, "cutoff") {
+		t.Errorf("метки модели просочились из текста человека: %q", scene)
+	}
+	if scene != "кота сам себе" {
+		t.Errorf("сцена собрана неверно: %q", scene)
+	}
+	if len(lines) != 1 || lines[0] != "мяу" {
+		t.Errorf("реплика потерялась: %q", lines)
+	}
+}
+
+// TestKeywordIsStillFoundAfterALineIsCutOut guards the order of operations: the
+// line is lifted out first, so the camera keyword ends up at the end of what
+// remains, which is the only place getVideoTemplate looks.
+func TestKeywordIsStillFoundAfterALineIsCutOut(t *testing.T) {
+	t.Setenv(videoTranslateEnv, "")
+
+	prompt, origin, err := buildVideoPrompt(`мужика в метро «я опоздал» медленно`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if origin.Style != "slow"+speechStyleMark {
+		t.Errorf("стиль определён неверно: %q", origin.Style)
+	}
+	if !strings.Contains(prompt, "slow motion") {
+		t.Errorf("шаблон движения не применился: %q", prompt)
+	}
+	if !strings.Contains(prompt, speechOpen+"я опоздал"+speechClose) {
+		t.Errorf("реплика не размечена: %q", prompt)
+	}
+}
+
+func TestSceneRequestAsksForSilence(t *testing.T) {
+	t.Setenv(videoTranslateEnv, "")
+
+	prompt, origin, err := buildVideoPrompt("танцующего кота")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(prompt, speechOpen) {
+		t.Errorf("в сцене без кавычек появилась разметка реплики: %q", prompt)
+	}
+	if !strings.Contains(prompt, noSpeechClause) {
+		t.Errorf("сцена не просит тишины, а это и есть лечение зачитывания: %q", prompt)
+	}
+	if origin.Style != defaultVideoStyleName {
+		t.Errorf("сцене приписали речь: %q", origin.Style)
+	}
+}
+
+func TestSpeechRequestDoesNotAskForSilence(t *testing.T) {
+	t.Setenv(videoTranslateEnv, "")
+
+	prompt, _, err := buildVideoPrompt(`мужика в метро «я опоздал»`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(prompt, noSpeechClause) {
+		t.Errorf("просим и говорить, и молчать одновременно: %q", prompt)
+	}
+	if !strings.Contains(prompt, "мужика в метро") {
+		t.Errorf("сцена не доехала: %q", prompt)
+	}
+}
+
+// TestLineOnlyRequestGetsASpeaker: a request that is nothing but a line still
+// needs someone in frame, otherwise the template wraps emptiness.
+func TestLineOnlyRequestGetsASpeaker(t *testing.T) {
+	t.Setenv(videoTranslateEnv, "")
+
+	prompt, _, err := buildVideoPrompt(`«привет, это я»`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(prompt, defaultSpeakerSubject) {
+		t.Errorf("говорить некому: %q", prompt)
+	}
+	if !strings.Contains(prompt, speechOpen+"привет, это я"+speechClose) {
+		t.Errorf("реплика не размечена: %q", prompt)
+	}
+}
+
+// TestSpokenLineIsNeverTranslated is the one that would silently ruin the
+// feature: with translation turned back on the scene may go to the llm, but the
+// line must reach the model in the words it was written in -- it is what the
+// viewer will hear.
+func TestSpokenLineIsNeverTranslated(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			if strings.Contains(string(body), "я опоздал") {
+				t.Error("реплика уехала на перевод")
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(
+				`{"choices":[{"message":{"content":"a man in the metro"}}]}`))
+		}))
+	defer server.Close()
+
+	t.Setenv(videoTranslateEnv, "1")
+	t.Setenv("AI_LLM_URL", server.URL)
+
+	prompt, _, err := buildVideoPrompt(`мужика в метро «я опоздал»`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(prompt, speechOpen+"я опоздал"+speechClose) {
+		t.Errorf("реплика не дошла по-русски: %q", prompt)
+	}
+	if !strings.Contains(prompt, "a man in the metro") {
+		t.Errorf("сцена не переведена, хотя перевод включён: %q", prompt)
+	}
+}
+
 // TestBuildVideoPromptSurvivesADeadLLM pins the price of the switch being on:
 // a translation failure still aborts the generation, which is one of the
 // reasons it is off.

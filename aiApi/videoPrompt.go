@@ -38,6 +38,142 @@ const defaultVideoTemplate = "%s. Natural smooth motion, steady camera, consiste
 // keyword: the model needs at least some subject.
 const defaultVideoSubject = "the scene comes to life"
 
+// A spoken line and a described scene are two different requests, and H3 has
+// its own way of telling them apart. Its tokenizer carries dialogue markers:
+// "<d>" and "</d>" written as plain text in the prompt become single token ids
+// (151669 and 151670) -- checked against the released tokenizer in the running
+// container on 19.10.2026, together with <|cutoff|>, which exists too but
+// whose meaning we have not established. Whatever stands inside the markers is
+// said out loud; whatever stands outside describes the shot.
+//
+// WHY WE NEEDED THIS. While the subject was translated into English, the
+// request read to the model as a caption and it filmed the scene. With the
+// subject left in Russian (see videoTranslateEnv) H3 started taking the
+// request for the line itself: almost every video came out as a person facing
+// the camera reciting the prompt. Which is a fair reading -- nothing in a bare
+// phrase says whether it is a description or a quote. Now the prompt says
+// which, in the model's own notation.
+//
+// The markers cost two tokens each and no speed.
+const (
+	speechOpen  = "<d>"
+	speechClose = "</d>"
+)
+
+// noSpeechClause is appended when nothing is quoted. The absence of a <d>
+// block by itself was not enough -- that is exactly how the reciting videos
+// were made -- and a negative prompt is not available: H3 samples through
+// BasicGuider, with a single conditioning and no guidance, so there is nowhere
+// to put "no speech" except the prompt itself.
+const noSpeechClause = "Nobody speaks and there is no voice-over: the soundtrack carries only the sounds of the scene itself."
+
+// defaultSpeakerSubject is the scene for a request that is nothing but a line
+// in quotes -- someone has to say it.
+const defaultSpeakerSubject = "a person faces the camera and speaks"
+
+// speechStyleMark is appended to the style name in statistics when the request
+// carried a line. Reusing the style column instead of asking the service for a
+// new one is a deliberate trade: the column is free-form text, grouping by it
+// still works, and the two things we want to know ("is anyone using this" and
+// "which motion goes with speech") are both answered. If speech ever becomes
+// interesting on its own -- how long the lines are, which language -- it
+// deserves its own column rather than more suffixes here.
+const speechStyleMark = "+speech"
+
+// speechQuotes are the quotation marks a line may be written in: the ones
+// people actually type on a phone. The opening mark is the key, so a straight
+// double quote closes with itself.
+//
+// A single quote is deliberately absent: apostrophes inside words ("it's",
+// "д'Артаньян") would open lines that never close.
+var speechQuotes = map[rune]rune{
+	'«': '»',
+	'"': '"',
+	'“': '”',
+	'„': '“',
+}
+
+// modelMarkers are the model's own control tokens. They are stripped from
+// everything a person typed, so that the only way into a <d> block is through
+// the quotes above -- a request that happens to contain "<d>" is a request
+// about text, not an instruction to the model.
+var modelMarkers = []string{
+	speechOpen, speechClose, "<|cutoff|>",
+	"<|lyrics_start|>", "<|lyrics_end|>",
+	"<|caption_start|>", "<|caption_end|>",
+}
+
+// tidy squeezes the whitespace left behind by cutting quotes and markers out
+// of the middle of a sentence.
+func tidy(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}
+
+// splitSpeech takes the quoted lines out of the request and returns what is
+// left of it as the scene, plus the lines in the order they were written.
+//
+// The lines come out BEFORE the camera keyword is looked for, and that order
+// matters: cutting "«я опоздал»" out of "мужика в метро «я опоздал» медленно"
+// rejoins the rest into "мужика в метро медленно", so the keyword is found at
+// the end where getVideoTemplate expects it.
+//
+// An unpaired quote stays where it is and means nothing: people open quotes
+// and forget to close them, and the alternative -- treating the whole tail as
+// a line -- turns a typo into a video of someone reading it out.
+func splitSpeech(text string) (string, []string) {
+	runes := []rune(tidy(stripMarkers(text)))
+	scene := make([]rune, 0, len(runes))
+	lines := []string{}
+
+	for i := 0; i < len(runes); i++ {
+		closer, ok := speechQuotes[runes[i]]
+		if !ok {
+			scene = append(scene, runes[i])
+			continue
+		}
+
+		end := -1
+		for j := i + 1; j < len(runes); j++ {
+			if runes[j] == closer {
+				end = j
+				break
+			}
+		}
+
+		if end < 0 {
+			scene = append(scene, runes[i])
+			continue
+		}
+
+		if line := tidy(string(runes[i+1 : end])); line != "" {
+			lines = append(lines, line)
+		}
+
+		i = end
+	}
+
+	return tidy(string(scene)), lines
+}
+
+// stripMarkers removes the model's control tokens from a person's text.
+func stripMarkers(text string) string {
+	for _, marker := range modelMarkers {
+		text = strings.ReplaceAll(text, marker, " ")
+	}
+
+	return text
+}
+
+// speechBlocks wraps each line in the model's dialogue markers.
+func speechBlocks(lines []string) string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		out = append(out, speechOpen+line+speechClose)
+	}
+
+	return strings.Join(out, " ")
+}
+
 // videoTranslateEnv turns translation of the video subject back on.
 //
 // Off since 16.10.2026: H3 reads the prompt with a Qwen3-VL 32B encoder
@@ -190,8 +326,10 @@ func getVideoPrompt(msgText string) string {
 }
 
 // buildVideoPrompt assembles the final prompt: it takes what the person asked
-// for and wraps it in the template of the chosen motion. The subject is
-// translated on the way only if AI_VIDEO_TRANSLATE says so.
+// for and wraps it in the template of the chosen motion. Anything they put in
+// quotes becomes a spoken line instead of part of the description, and what is
+// left is the scene. The subject is translated on the way only if
+// AI_VIDEO_TRANSLATE says so.
 //
 // The templates stay English even when the subject does not, and the mix is
 // deliberate. Camera and motion wording ("a slow cinematic push-in", "the
@@ -200,15 +338,24 @@ func getVideoPrompt(msgText string) string {
 // subject is the half where Russian carries meaning no paraphrase keeps.
 //
 // It also reports where the prompt came from. Everything the assembly does --
-// cutting the keyword, wrapping, and translating when it is on -- is lossy,
-// and the raw request is worth keeping: see promptOrigin.
+// cutting the keyword, lifting the lines out, wrapping, and translating when
+// it is on -- is lossy, and the raw request is worth keeping: see promptOrigin.
 func buildVideoPrompt(msgText string) (string, promptOrigin, error) {
-	template := getVideoTemplate(msgText)
-	origin := promptOrigin{Source: msgText, Style: getVideoStyle(msgText)}
+	scene, lines := splitSpeech(msgText)
 
-	subject := getVideoPrompt(msgText)
+	template := getVideoTemplate(scene)
+	origin := promptOrigin{Source: msgText, Style: getVideoStyle(scene)}
+	if len(lines) > 0 {
+		origin.Style += speechStyleMark
+	}
+
+	subject := getVideoPrompt(scene)
 	if subject == "" {
+		// A request that is nothing but a line still needs someone to say it.
 		subject = defaultVideoSubject
+		if len(lines) > 0 {
+			subject = defaultSpeakerSubject
+		}
 	}
 
 	if translateVideoPrompts() {
@@ -220,5 +367,14 @@ func buildVideoPrompt(msgText string) (string, promptOrigin, error) {
 		subject = translated
 	}
 
-	return applyPromptTemplate(template, subject), origin, nil
+	prompt := applyPromptTemplate(template, subject)
+
+	// The lines themselves are never translated, not even with translation
+	// turned back on: they are what the person will hear said, and the whole
+	// point of a line is that it is said in the words it was written in.
+	if len(lines) > 0 {
+		return prompt + " " + speechBlocks(lines), origin, nil
+	}
+
+	return prompt + " " + noSpeechClause, origin, nil
 }
