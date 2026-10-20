@@ -57,7 +57,14 @@ func contentOf(resBytes []byte) (string, error) {
 	return content, nil
 }
 
-const translateSystemPrompt = "Если эта фраза на русском, переведи её на английский. В противном случае оставь как есть. Формат вывода только результат."
+// translateSystemPrompt turns an image prompt into English. Images need it for
+// a different reason than video did: their encoder is a much smaller
+// Qwen3Model, trained mostly on English and Chinese.
+//
+// "Whatever language it is in", not "if it is Russian": the bot is in Russian
+// and most requests are, but nothing stops a German or a French one, and the
+// old wording left those two to the encoder as they came.
+const translateSystemPrompt = "Translate this phrase into English, whatever language it is written in. If it is already English, leave it exactly as it is. Output the result and nothing else."
 
 // askLLM asks the model one question and returns its answer.
 func askLLM(systemPrompt, userText string) (string, error) {

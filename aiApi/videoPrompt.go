@@ -1,8 +1,9 @@
 package aiApi
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
-	"unicode"
 )
 
 // Motion templates for video: the same thing as styles for images, except the
@@ -17,26 +18,36 @@ import (
 // Sound is mentioned in every template for a reason: H3 generates stereo in the
 // same pass, and the track ends up in the mp4 anyway. Not mentioning it means
 // leaving it to the model's whim.
-type videoStyle struct {
-	// name identifies the template in statistics. It is deliberately not the
-	// suffix: suffixes are wording and may change, the name is a key we will
-	// be grouping by months later.
-	name string
-	// suffixes are how the user turns the template on. They are looked for at
-	// the end of the request, as with images: "анимируй кота вокруг".
-	suffixes []string
-	template string
+//
+// The keys are the vocabulary the llm chooses from (see videoPlanPrompt) and at
+// the same time the names we group statistics by. One list, so the two cannot
+// drift apart.
+var videoTemplates = map[string]string{
+	"slow":      "%s. The action unfolds in slow motion, fluid and unhurried, the camera holds steady. Soft ambient sound.",
+	"orbit":     "%s. The camera slowly orbits the subject in one smooth continuous arc. Ambient sound moves with the camera.",
+	"push-in":   "%s. A slow cinematic push-in toward the subject, the framing gradually tightening. Ambient sound grows closer.",
+	"pull-back": "%s. The camera slowly pulls back to reveal the surroundings. Ambient sound opens out.",
+	"aerial":    "%s. A sweeping aerial shot gliding over the scene, wind and open-air ambience.",
+	"lively":    "%s. Quick confident movement, energetic action, the camera keeps up. Lively ambient sound.",
 }
 
-// defaultVideoStyleName marks a request that asked for no template.
+// defaultVideoStyleName marks a request that asked for no particular motion.
 const defaultVideoStyleName = "default"
 
-// defaultVideoTemplate applies when there is no keyword.
+// defaultVideoTemplate applies when no motion was asked for.
 const defaultVideoTemplate = "%s. Natural smooth motion, steady camera, consistent lighting. Ambient sound that matches the scene."
 
-// defaultVideoSubject is substituted when nothing is left after cutting off the
-// keyword: the model needs at least some subject.
+// defaultVideoSubject is substituted when there is no scene at all: the model
+// needs at least some subject.
 const defaultVideoSubject = "the scene comes to life"
+
+// DefaultAnimationPrompt is what a picture sent without a caption is animated
+// by. It is exported because the bot substitutes it and the assembly here
+// recognises it: it is our own English sentence, there is nothing in it to
+// plan, and a round trip to the llm only risks getting it back as "a static
+// image of an unknown subject begins to move and animate" (measured
+// 20.10.2026).
+const DefaultAnimationPrompt = "the scene in the picture comes to life"
 
 // A spoken line and a described scene are two different requests, and H3 has
 // its own way of telling them apart. Its tokenizer carries dialogue markers:
@@ -47,13 +58,13 @@ const defaultVideoSubject = "the scene comes to life"
 // said out loud; whatever stands outside describes the shot.
 //
 // WHY WE NEEDED THIS. For the few days the scene went to the model in Russian
-// (16.10.2026 to 20.10.2026, see needsTranslation) H3 started taking the
-// request for the line itself: almost every video came out as a person facing
-// the camera reciting the prompt. Which is a fair reading -- nothing in a bare
-// phrase says whether it is a description or a quote. The markers say which,
-// in the model's own notation, and they stay now that the scene is translated
-// again: the line itself is still Russian, and it is the one part that has to
-// be told apart from the description.
+// (16.10.2026 to 20.10.2026) H3 started taking the request for the line
+// itself: almost every video came out as a person facing the camera reciting
+// the prompt. Which is a fair reading -- nothing in a bare phrase says whether
+// it is a description or a quote. The markers say which, in the model's own
+// notation, and they stay now that the scene is translated again: the line is
+// still in the language it was typed in, and it is the one part that has to be
+// told apart from the description.
 //
 // The markers cost two tokens each and no speed.
 const (
@@ -61,15 +72,15 @@ const (
 	speechClose = "</d>"
 )
 
-// noSpeechClause is appended when nothing is quoted. The absence of a <d>
-// block by itself was not enough -- that is exactly how the reciting videos
-// were made -- and a negative prompt is not available: H3 samples through
+// noSpeechClause is appended when there is no line. The absence of a <d> block
+// by itself was not enough -- that is exactly how the reciting videos were
+// made -- and a negative prompt is not available: H3 samples through
 // BasicGuider, with a single conditioning and no guidance, so there is nowhere
 // to put "no speech" except the prompt itself.
 const noSpeechClause = "Nobody speaks and there is no voice-over: the soundtrack carries only the sounds of the scene itself."
 
 // defaultSpeakerSubject is the scene for a request that is nothing but a line
-// in quotes -- someone has to say it.
+// -- someone has to say it.
 const defaultSpeakerSubject = "a person faces the camera and speaks"
 
 // speechStyleMark is appended to the style name in statistics when the request
@@ -81,88 +92,148 @@ const defaultSpeakerSubject = "a person faces the camera and speaks"
 // deserves its own column rather than more suffixes here.
 const speechStyleMark = "+speech"
 
-// speechQuotes are the quotation marks a line may be written in: the ones
-// people actually type on a phone. The opening mark is the key, so a straight
-// double quote closes with itself.
-//
-// A single quote is deliberately absent: apostrophes inside words ("it's",
-// "д'Артаньян") would open lines that never close.
-var speechQuotes = map[rune]rune{
-	'«': '»',
-	'"': '"',
-	'“': '”',
-	'„': '“',
-}
-
-// modelMarkers are the model's own control tokens. They are stripped from
+// modelMarkers are the model's own control tokens. They are cut out of
 // everything a person typed, so that the only way into a <d> block is through
-// the quotes above -- a request that happens to contain "<d>" is a request
-// about text, not an instruction to the model.
+// the plan below -- a request that happens to contain "<d>" is a request about
+// text, not an instruction to the model.
 var modelMarkers = []string{
 	speechOpen, speechClose, "<|cutoff|>",
 	"<|lyrics_start|>", "<|lyrics_end|>",
 	"<|caption_start|>", "<|caption_end|>",
 }
 
-// tidy squeezes the whitespace left behind by cutting quotes and markers out
-// of the middle of a sentence.
+// tidy squeezes the whitespace left behind by cutting markers out of the
+// middle of a sentence.
 func tidy(text string) string {
 	return strings.Join(strings.Fields(text), " ")
 }
 
-// splitSpeech takes the quoted lines out of the request and returns what is
-// left of it as the scene, plus the lines in the order they were written.
-//
-// The lines come out BEFORE the camera keyword is looked for, and that order
-// matters: cutting "«я опоздал»" out of "мужика в метро «я опоздал» медленно"
-// rejoins the rest into "мужика в метро медленно", so the keyword is found at
-// the end where getVideoTemplate expects it.
-//
-// An unpaired quote stays where it is and means nothing: people open quotes
-// and forget to close them, and the alternative -- treating the whole tail as
-// a line -- turns a typo into a video of someone reading it out.
-func splitSpeech(text string) (string, []string) {
-	runes := []rune(tidy(stripMarkers(text)))
-	scene := make([]rune, 0, len(runes))
-	lines := []string{}
-
-	for i := 0; i < len(runes); i++ {
-		closer, ok := speechQuotes[runes[i]]
-		if !ok {
-			scene = append(scene, runes[i])
-			continue
-		}
-
-		end := -1
-		for j := i + 1; j < len(runes); j++ {
-			if runes[j] == closer {
-				end = j
-				break
-			}
-		}
-
-		if end < 0 {
-			scene = append(scene, runes[i])
-			continue
-		}
-
-		if line := tidy(string(runes[i+1 : end])); line != "" {
-			lines = append(lines, line)
-		}
-
-		i = end
-	}
-
-	return tidy(string(scene)), lines
-}
-
-// stripMarkers removes the model's control tokens from a person's text.
+// stripMarkers removes the model's control tokens from a text.
 func stripMarkers(text string) string {
 	for _, marker := range modelMarkers {
 		text = strings.ReplaceAll(text, marker, " ")
 	}
 
 	return text
+}
+
+// videoPlan is what the llm makes of a request: what to show, what to say and
+// how to move the camera.
+type videoPlan struct {
+	// Scene is the description in English. When something is said it ends with
+	// the words that introduce it ("and then he says:"), which is where the
+	// model looks for the quote.
+	Scene string `json:"scene"`
+	// Lines are the words to be said out loud, in the language they were
+	// written in.
+	Lines []string `json:"lines"`
+	// Camera is a key of videoTemplates, or anything else for none.
+	Camera string `json:"camera"`
+}
+
+// videoPlanPrompt asks the llm for that plan.
+//
+// WHY THE LLM AND NOT US. Until 20.10.2026 the assembly did this itself: it
+// paired quotation marks to find the line, matched a keyword at the end of the
+// request to pick the camera, and sent what was left to be translated. Every
+// bug in the feature came from that pattern matching meeting live language --
+// a keyword that stopped being last once the line was lifted out, a quote
+// right after the command eaten as a separator, a scene left ending in "and
+// then says:" with the line put after the camera sentence, so the model read
+// our own English template aloud. Each fix was narrower than the next request.
+//
+// The llm is already in the path (the scene has to be translated anyway), it
+// knows what a quote is in any language and what the words "slowly" and
+// "langsam" ask of a camera. So it does the whole reading in one call, and the
+// code keeps only what must be exact: the markers, the templates and the
+// checks below.
+//
+// The plan comes back as data, not as a prompt. The llm never writes the
+// markers itself -- otherwise a request could ask it to, and we would be
+// passing a stranger's control tokens straight to the generator.
+const videoPlanPrompt = `You prepare prompts for a text-to-video model.
+
+The request may be in any language. Answer with ONE JSON object and nothing else:
+
+{"scene": "...", "lines": ["..."], "camera": "..."}
+
+"scene": what the camera sees, in English, translated from whatever language the
+request is in. One or two sentences. Describe only what is visible. Do not add
+lighting, style, sound or camera movement. Do not put the spoken words in it.
+If something is said, end the scene with the words that introduce it, for
+example "and then he says:".
+
+"lines": the words to be said out loud, copied EXACTLY as written, in their
+original language, without quotation marks. Keep every spelling mistake as it
+is. Take them from what the user put in quotes or introduced with a verb of
+speaking. Never translate them. Never invent them. If nothing is said, return [].
+
+"camera": one of these, "none" if the request asks for no movement:
+"none", "slow" (slow motion), "orbit" (the camera circles the subject),
+"push-in" (the camera moves closer), "pull-back" (the camera moves away and
+reveals the surroundings), "aerial" (seen from above), "lively" (quick
+energetic movement).`
+
+// planVideo asks the llm to read the request.
+func planVideo(request string) (videoPlan, error) {
+	answer, err := askLLM(videoPlanPrompt, request)
+	if err != nil {
+		return videoPlan{}, err
+	}
+
+	return parseVideoPlan(answer, request)
+}
+
+// parseVideoPlan reads the answer and refuses what it cannot vouch for.
+func parseVideoPlan(answer, request string) (videoPlan, error) {
+	var plan videoPlan
+	if err := json.Unmarshal([]byte(unfence(answer)), &plan); err != nil {
+		return videoPlan{}, fmt.Errorf("video plan is not valid json (%w): %s", err, answer)
+	}
+
+	plan.Scene = tidy(stripMarkers(plan.Scene))
+
+	if _, ok := videoTemplates[plan.Camera]; !ok {
+		// A camera we do not have a template for is not worth failing over:
+		// the worst case is a video without the motion that was asked for.
+		plan.Camera = defaultVideoStyleName
+	}
+
+	lines := make([]string, 0, len(plan.Lines))
+	for _, line := range plan.Lines {
+		line = tidy(stripMarkers(line))
+		if line == "" {
+			continue
+		}
+
+		// A line the person did not write is the one failure we cannot let
+		// through: it would be said out loud in their video. Paraphrases,
+		// translations and helpfully corrected typos are all caught here --
+		// the words have to be in the request as they came.
+		if !strings.Contains(strings.ToLower(request), strings.ToLower(line)) {
+			return videoPlan{}, fmt.Errorf("video plan invented a line %q, request was %q", line, request)
+		}
+
+		lines = append(lines, line)
+	}
+	plan.Lines = lines
+
+	return plan, nil
+}
+
+// unfence unwraps an answer the model put in a markdown code fence. Asking for
+// bare json is not a guarantee of getting it.
+func unfence(answer string) string {
+	text := strings.TrimSpace(answer)
+	if !strings.HasPrefix(text, "```") {
+		return text
+	}
+
+	if cut := strings.Index(text, "\n"); cut >= 0 {
+		text = text[cut+1:]
+	}
+
+	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(text), "```"))
 }
 
 // speechBlocks wraps each line in the model's dialogue markers.
@@ -175,206 +246,61 @@ func speechBlocks(lines []string) string {
 	return strings.Join(out, " ")
 }
 
-// needsTranslation reports whether the subject has anything to translate: a
-// Cyrillic letter anywhere in it.
+// buildVideoPrompt assembles the final prompt out of the plan: the scene goes
+// into the template of the asked-for motion, the lines go in the model's
+// dialogue markers, and a request with no lines asks for silence outright.
 //
-// WHY THE SCENE IS TRANSLATED AT ALL. It was not, from 16.10.2026 to
-// 20.10.2026: H3 reads the prompt with a Qwen3-VL 32B encoder (CLIPLoader of
-// qwen3vl_32b_minimax_h3_nvfp4_awq, type minimax), that encoder is
-// multilingual, and Russian did reach it. The encoder was never the problem --
-// the model behind it was captioned in English. An ordinary scene survives the
-// crossing: "бородатый мужик колет дрова во дворе зимой" came out exactly as
-// asked. A short or far-fetched request does not: the aim blurs and the model
-// falls back on its strongest habit, a person in front of the camera. On
-// 20.10.2026 "человек застрелил трусы" came out a beauty vlog, while the same
-// request in English ("a man shooting down the pants") came out right -- both
-// are in the job history, 19:19 against 19:30. That habit is the same one that
-// used to make the model recite the prompt out loud; the markers below took
-// away its voice, not the habit itself.
+// Everything the model is asked to SHOW ends up in English -- the templates
+// were written that way and the scene comes back translated. The only part
+// left in the language it was typed in is what the model is asked to SAY.
 //
-// So the subject goes to the llm, always, with the price known and accepted:
-// one round trip before every video, on the critical path, and a dead llm
-// aborts the generation (see buildVideoPrompt) instead of sending a prompt the
-// model would misread. There is no switch for this any more -- the choice has
-// been measured, and a second lever would only be one more thing to get wrong.
+// The lines stand right next to the scene, inside the sentence the template
+// wraps, and not after it. The markers alone do not decide what gets said:
+// what directly follows the words that introduce speech does. Caught on
+// 20.10.2026 by "человек стреляет в трусы, а потом говорит: «Я покакал»" --
+// the line stood at the end of the prompt, behind the camera and sound
+// sentences, and the model said our own "Natural smooth motion, steady camera,
+// consistent lighting" out loud. Of everything in the prompt, that was the
+// text standing where a quote belongs.
 //
-// What is NOT translated: the line in quotes, which is said out loud and must
-// be heard in the words it was written in, and a subject with no Cyrillic in
-// it. The llm is told the same rule ("translate if it is Russian, otherwise
-// leave it as is"), but deciding it here costs nothing -- and it keeps our own
-// English defaults, such as the one a captionless photo arrives with, from
-// coming back as somebody's paraphrase.
-func needsTranslation(text string) bool {
-	for _, r := range text {
-		if unicode.Is(unicode.Cyrillic, r) {
-			return true
-		}
-	}
-
-	return false
-}
-
-var videoStyles = []videoStyle{
-	{
-		"slow",
-		[]string{" медленно", " slowly"},
-		"%s. The action unfolds in slow motion, fluid and unhurried, the camera holds steady. Soft ambient sound.",
-	},
-	{
-		"orbit",
-		[]string{" вокруг", " around"},
-		"%s. The camera slowly orbits the subject in one smooth continuous arc. Ambient sound moves with the camera.",
-	},
-	{
-		"push-in",
-		[]string{" ближе", " closer"},
-		"%s. A slow cinematic push-in toward the subject, the framing gradually tightening. Ambient sound grows closer.",
-	},
-	{
-		"pull-back",
-		[]string{" дальше", " wider"},
-		"%s. The camera slowly pulls back to reveal the surroundings. Ambient sound opens out.",
-	},
-	{
-		"aerial",
-		[]string{" сверху", " above"},
-		"%s. A sweeping aerial shot gliding over the scene, wind and open-air ambience.",
-	},
-	{
-		"lively",
-		[]string{" живо", " lively"},
-		"%s. Quick confident movement, energetic action, the camera keeps up. Lively ambient sound.",
-	},
-}
-
-// cutVideoSuffix reports whether the request ends in the given keyword and
-// gives back what is left before it. All three readers of the table below go
-// through it, so "ends in a keyword" cannot come to mean three slightly
-// different things.
-//
-// Case is compared fold-wise instead of lowercasing the whole string, and what
-// is left is cut out of the ORIGINAL text, so the subject keeps the case the
-// person typed. While the subject was translated this made no difference --
-// the llm restored the case on its own -- but now it reaches the encoder as
-// typed, and "Красная площадь" is not the same thing to it as "красная
-// площадь".
-//
-// The tail is measured in runes, not bytes: the keywords are Russian, one
-// letter there is two bytes, and byte arithmetic over a lowercased copy would
-// cut a word in half on the first character that changes length in lower case.
-func cutVideoSuffix(text, suffix string) (string, bool) {
-	runes, tail := []rune(text), []rune(suffix)
-	if len(runes) < len(tail) {
-		return text, false
-	}
-
-	border := len(runes) - len(tail)
-	if !strings.EqualFold(string(runes[border:]), suffix) {
-		return text, false
-	}
-
-	return strings.TrimSpace(string(runes[:border])), true
-}
-
-// getVideoStyle names the template the trailing keyword asks for. Reads the
-// same table as getVideoTemplate so the two cannot drift apart.
-func getVideoStyle(msgText string) string {
-	text := strings.TrimSpace(msgText)
-
-	for _, style := range videoStyles {
-		for _, suffix := range style.suffixes {
-			if _, ok := cutVideoSuffix(text, suffix); ok {
-				return style.name
-			}
-		}
-	}
-
-	return defaultVideoStyleName
-}
-
-// getVideoTemplate returns the template the trailing keyword asks for, or the
-// default one when the request ends in no keyword at all.
-func getVideoTemplate(msgText string) string {
-	text := strings.TrimSpace(msgText)
-
-	for _, style := range videoStyles {
-		for _, suffix := range style.suffixes {
-			if _, ok := cutVideoSuffix(text, suffix); ok {
-				return style.template
-			}
-		}
-	}
-
-	return defaultVideoTemplate
-}
-
-// getVideoPrompt cuts the trailing keyword off, leaving what the video is
-// actually about. The template says the rest.
-//
-// The case is left as the person typed it -- see cutVideoSuffix for why that
-// started to matter.
-func getVideoPrompt(msgText string) string {
-	text := strings.TrimSpace(msgText)
-
-	for _, style := range videoStyles {
-		for _, suffix := range style.suffixes {
-			if cut, ok := cutVideoSuffix(text, suffix); ok {
-				return cut
-			}
-		}
-	}
-
-	return text
-}
-
-// buildVideoPrompt assembles the final prompt: it takes what the person asked
-// for and wraps it in the template of the chosen motion. Anything they put in
-// quotes becomes a spoken line instead of part of the description, and what is
-// left is the scene.
-//
-// Everything the model is asked to SHOW ends up in English -- the motion
-// templates were written that way, and the scene is translated on the way (see
-// needsTranslation). The only part left in the language it was typed in is
-// what the model is asked to SAY: the line in quotes.
-//
-// It also reports where the prompt came from. Everything the assembly does --
-// cutting the keyword, lifting the lines out, wrapping and translating -- is
-// lossy, and the raw request is worth keeping: see promptOrigin.
+// It also reports where the prompt came from. The plan is a lossy reading of
+// the request, and the raw words are worth keeping: see promptOrigin.
 func buildVideoPrompt(msgText string) (string, promptOrigin, error) {
-	scene, lines := splitSpeech(msgText)
+	request := tidy(stripMarkers(msgText))
+	origin := promptOrigin{Source: msgText}
 
-	template := getVideoTemplate(scene)
-	origin := promptOrigin{Source: msgText, Style: getVideoStyle(scene)}
-	if len(lines) > 0 {
-		origin.Style += speechStyleMark
-	}
-
-	subject := getVideoPrompt(scene)
-	if subject == "" {
-		// A request that is nothing but a line still needs someone to say it.
-		subject = defaultVideoSubject
-		if len(lines) > 0 {
-			subject = defaultSpeakerSubject
-		}
-	}
-
-	if needsTranslation(subject) {
-		translated, err := translatePrompt(subject)
+	plan := videoPlan{Scene: request, Camera: defaultVideoStyleName}
+	if request != "" && request != DefaultAnimationPrompt {
+		planned, err := planVideo(request)
 		if err != nil {
 			return "", origin, err
 		}
 
-		subject = translated
+		plan = planned
 	}
 
-	prompt := applyPromptTemplate(template, subject)
-
-	// The lines themselves are never translated, not even with translation
-	// turned back on: they are what the person will hear said, and the whole
-	// point of a line is that it is said in the words it was written in.
-	if len(lines) > 0 {
-		return prompt + " " + speechBlocks(lines), origin, nil
+	origin.Style = plan.Camera
+	if len(plan.Lines) > 0 {
+		origin.Style += speechStyleMark
 	}
 
-	return prompt + " " + noSpeechClause, origin, nil
+	subject := plan.Scene
+	if subject == "" {
+		// A request that is nothing but a line still needs someone to say it.
+		subject = defaultVideoSubject
+		if len(plan.Lines) > 0 {
+			subject = defaultSpeakerSubject
+		}
+	}
+
+	template, ok := videoTemplates[plan.Camera]
+	if !ok {
+		template = defaultVideoTemplate
+	}
+
+	if len(plan.Lines) > 0 {
+		return applyPromptTemplate(template, subject+" "+speechBlocks(plan.Lines)), origin, nil
+	}
+
+	return applyPromptTemplate(template, subject) + " " + noSpeechClause, origin, nil
 }

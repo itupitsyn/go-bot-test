@@ -2,6 +2,7 @@ package bot
 
 import (
 	"strings"
+	"telebot/aiApi"
 	"telebot/utils"
 	"unicode"
 	"unicode/utf8"
@@ -12,7 +13,11 @@ import (
 // defaultAnimationPrompt is used when a picture is handed to the animator
 // without any words of its own. It only names the subject: the motion and the
 // sound come from the video template around it.
-const defaultAnimationPrompt = "the scene in the picture comes to life"
+//
+// It belongs to aiApi rather than here because the assembly there recognises
+// it and skips the llm: there is nothing to translate or to read for speech in
+// our own English sentence.
+const defaultAnimationPrompt = aiApi.DefaultAnimationPrompt
 
 // quotationMarks lists the marks that ask the video model for a spoken line
 // (speechQuotes in the aiApi package).

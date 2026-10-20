@@ -9,37 +9,16 @@ import (
 	"testing"
 )
 
-// echoLLM puts a stand-in translator in front of the assembly: it answers with
-// the very text it was handed.
-//
-// Returning the text unchanged is what makes the rest of the tests readable.
-// The scene now always goes through the llm, but these tests are about markers,
-// templates and silence, not about translation -- and with an echo they can
-// keep saying "мужика в метро" instead of chasing whatever English a stub
-// decided to invent.
-func echoLLM(t *testing.T) {
+// planLLM stands in for the llm: it answers every request with the given plan
+// and remembers what it was asked.
+func planLLM(t *testing.T, answer string) *string {
 	t.Helper()
 
+	asked := new(string)
 	server := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			var ask struct {
-				Messages []struct {
-					Role    string `json:"role"`
-					Content string `json:"content"`
-				} `json:"messages"`
-			}
-
 			body, _ := io.ReadAll(r.Body)
-			if err := json.Unmarshal(body, &ask); err != nil {
-				t.Errorf("перевод попросили не json-ом: %v", err)
-			}
-
-			answer := ""
-			for _, message := range ask.Messages {
-				if message.Role == "user" {
-					answer = message.Content
-				}
-			}
+			*asked = string(body)
 
 			reply, err := json.Marshal(map[string]any{
 				"choices": []map[string]any{
@@ -56,278 +35,100 @@ func echoLLM(t *testing.T) {
 
 	t.Cleanup(server.Close)
 	t.Setenv("AI_LLM_URL", server.URL)
-}
 
-func TestGetVideoTemplate(t *testing.T) {
-	cases := [][2]string{
-		{"кота медленно", "slow motion"},
-		{"a cat slowly", "slow motion"},
-		{"кота вокруг", "orbits the subject"},
-		{"a cat around", "orbits the subject"},
-		{"кота ближе", "push-in"},
-		{"кота дальше", "pulls back"},
-		{"кота сверху", "aerial shot"},
-		{"кота живо", "energetic action"},
-		{"Кота МЕДЛЕННО", "slow motion"},
-	}
-
-	for _, c := range cases {
-		res := getVideoTemplate(c[0])
-		if !strings.Contains(res, c[1]) {
-			t.Errorf("getVideoTemplate(%q): want it to include %q, got %q", c[0], c[1], res)
-		}
-	}
-}
-
-func TestGetVideoTemplateFallsBackToDefault(t *testing.T) {
-	cases := []string{"кота", "", "танцующего кота на столе"}
-
-	for _, c := range cases {
-		if res := getVideoTemplate(c); res != defaultVideoTemplate {
-			t.Errorf("getVideoTemplate(%q): want the default template, got %q", c, res)
-		}
-	}
+	return asked
 }
 
 func TestEveryVideoTemplateMentionsSound(t *testing.T) {
-	// H3 generates stereo in the same pass, so the track ends up in the mp4
-	// regardless of us: every template must talk about it.
-	if !strings.Contains(defaultVideoTemplate, "sound") {
-		t.Errorf("the default template says nothing about sound: %q", defaultVideoTemplate)
+	templates := map[string]string{defaultVideoStyleName: defaultVideoTemplate}
+	for name, template := range videoTemplates {
+		templates[name] = template
 	}
 
-	for _, style := range videoStyles {
-		lower := strings.ToLower(style.template)
-		if !strings.Contains(lower, "sound") && !strings.Contains(lower, "ambience") {
-			t.Errorf("template %q says nothing about sound", style.template)
+	for name, template := range templates {
+		lowered := strings.ToLower(template)
+		if !strings.Contains(lowered, "sound") && !strings.Contains(lowered, "ambience") {
+			t.Errorf("шаблон %q молчит про звук: H3 всё равно его сгенерирует", name)
 		}
 	}
 }
 
 func TestEveryVideoTemplateHasOnePlaceholder(t *testing.T) {
-	templates := append([]string{defaultVideoTemplate}, func() []string {
-		out := []string{}
-		for _, style := range videoStyles {
-			out = append(out, style.template)
-		}
-		return out
-	}()...)
+	templates := map[string]string{defaultVideoStyleName: defaultVideoTemplate}
+	for name, template := range videoTemplates {
+		templates[name] = template
+	}
 
-	for _, template := range templates {
+	for name, template := range templates {
 		if strings.Count(template, "%s") != 1 {
-			t.Errorf("template %q must carry exactly one %%s", template)
+			t.Errorf("шаблон %q должен содержать ровно одно место для сцены", name)
 		}
 	}
 }
 
-func TestGetVideoPrompt(t *testing.T) {
-	cases := [][2]string{
-		{"кота медленно", "кота"},
-		{"танцующего кота вокруг", "танцующего кота"},
-		{"a dancing cat slowly", "a dancing cat"},
-		{"Кота СВЕРХУ", "Кота"},
-		{"кота", "кота"},
-		{"", ""},
-		// The keyword is separated by a space, so a word that merely ends with
-		// it stays whole.
-		{"кота наживо", "кота наживо"},
-		{"кота вокруг вокруг", "кота вокруг"},
-	}
-
-	for _, c := range cases {
-		if res := getVideoPrompt(c[0]); res != c[1] {
-			t.Errorf("getVideoPrompt(%q): want %q, got %q", c[0], c[1], res)
-		}
-	}
-}
-
-func TestGetVideoPromptLeavesNothingWhenOnlyKeyword(t *testing.T) {
-	// Only emptiness is left: the caller must substitute the default subject,
-	// otherwise a bare template goes to the model.
-	if res := getVideoPrompt("медленно"); res != "медленно" {
-		t.Errorf("одинокое слово без пробела перед ним ключевым не считается, got %q", res)
-	}
-}
-
-// TestGetVideoPromptKeepsTheCaseAsTyped guards what used to be harmless. The
-// subject used to be lowercased and then translated, and the llm put the case
-// back; with translation off it goes to the encoder exactly as it comes out of
-// here, and a proper noun in lower case is not the same input.
-func TestGetVideoPromptKeepsTheCaseAsTyped(t *testing.T) {
-	cases := [][2]string{
-		{"Красную площадь сверху", "Красную площадь"},
-		{"Чебурашку МЕДЛЕННО", "Чебурашку"},
-		{"The Kremlin Closer", "The Kremlin"},
-		{"Гагарина", "Гагарина"},
-	}
-
-	for _, c := range cases {
-		if res := getVideoPrompt(c[0]); res != c[1] {
-			t.Errorf("getVideoPrompt(%q): want %q, got %q", c[0], c[1], res)
-		}
-	}
-}
-
-func TestNeedsTranslation(t *testing.T) {
-	cases := []struct {
-		text string
-		want bool
-	}{
-		{"кота на крыше", true},
-		{"Чебурашку closer", true},
-		{"a cat on the roof", false},
-		{"the scene in the picture comes to life", false},
-		{"a person faces the camera and speaks", false},
-		{"", false},
-	}
-
-	for _, c := range cases {
-		if got := needsTranslation(c.text); got != c.want {
-			t.Errorf("needsTranslation(%q) = %v, want %v", c.text, got, c.want)
-		}
-	}
-}
-
-// TestEnglishSubjectIsNotSentForTranslation: there is nothing to translate in
-// it, and that includes our own defaults -- the one a captionless photo comes
-// with is English too. AI_LLM_URL points nowhere on purpose: an llm call would
-// turn this test red instead of letting it pass quietly.
-func TestEnglishSubjectIsNotSentForTranslation(t *testing.T) {
-	t.Setenv("AI_LLM_URL", "http://127.0.0.1:1")
-
-	prompt, origin, err := buildVideoPrompt("a cat on the roof around")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !strings.Contains(prompt, "a cat on the roof") {
-		t.Errorf("текст не доехал до промпта: %q", prompt)
-	}
-	if !strings.Contains(prompt, "orbits the subject") {
-		t.Errorf("шаблон движения потерялся: %q", prompt)
-	}
-	if origin.Source != "a cat on the roof around" || origin.Style != "orbit" {
-		t.Errorf("статистика собрана неверно: %+v", origin)
-	}
-}
-
-func TestBuildVideoPromptTranslatesTheScene(t *testing.T) {
-	asked := ""
-	server := httptest.NewServer(http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
-			body, _ := io.ReadAll(r.Body)
-			asked = string(body)
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(
-				`{"choices":[{"message":{"content":"a cat on a roof"}}]}`))
-		}))
-	defer server.Close()
-
-	t.Setenv("AI_LLM_URL", server.URL)
-
-	prompt, _, err := buildVideoPrompt("кота на крыше вокруг")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !strings.Contains(asked, "кота на крыше") {
-		t.Errorf("на перевод уехало не то: %q", asked)
-	}
-
-	if !strings.Contains(prompt, "a cat on a roof") {
-		t.Errorf("перевод не попал в промпт: %q", prompt)
-	}
-
-	if strings.Contains(prompt, "кота") {
-		t.Errorf("исходный текст остался рядом с переводом: %q", prompt)
-	}
-}
-
-func TestSplitSpeechTakesTheLinesOut(t *testing.T) {
-	cases := []struct {
-		text  string
-		scene string
-		lines []string
-	}{
-		{`мужика в метро «я опять опоздал»`, "мужика в метро", []string{"я опять опоздал"}},
-		{`мужика в метро "я опять опоздал"`, "мужика в метро", []string{"я опять опоздал"}},
-		{"мужика в метро “я опять опоздал”", "мужика в метро", []string{"я опять опоздал"}},
-		{"мужика в метро „я опять опоздал“", "мужика в метро", []string{"я опять опоздал"}},
-		// The line may stand anywhere, and the words around it stay the scene.
-		{`кот «мяу» на диване`, "кот на диване", []string{"мяу"}},
-		// Two lines are two lines, in the order written.
-		{`спор «ты кто» «я сам кто»`, "спор", []string{"ты кто", "я сам кто"}},
-		// Nothing quoted at all: everything is the scene.
-		{"танцующего кота", "танцующего кота", []string{}},
-		// Empty quotes are not a line.
-		{`кота «»`, "кота", []string{}},
-	}
-
-	for _, c := range cases {
-		scene, lines := splitSpeech(c.text)
-		if scene != c.scene {
-			t.Errorf("splitSpeech(%q): сцена %q, ждали %q", c.text, scene, c.scene)
-		}
-		if strings.Join(lines, "|") != strings.Join(c.lines, "|") {
-			t.Errorf("splitSpeech(%q): реплики %q, ждали %q", c.text, lines, c.lines)
-		}
-	}
-}
-
-// TestSplitSpeechLeavesAnUnpairedQuoteAlone: a forgotten closing quote must not
-// turn the rest of the request into a line. Otherwise a typo produces a video
-// of someone reading the request out loud -- the very thing being fixed here.
-func TestSplitSpeechLeavesAnUnpairedQuoteAlone(t *testing.T) {
-	scene, lines := splitSpeech(`кота «на подоконнике`)
-
-	if len(lines) != 0 {
-		t.Errorf("непарная кавычка стала репликой: %q", lines)
-	}
-	if scene != `кота «на подоконнике` {
-		t.Errorf("сцена пострадала: %q", scene)
-	}
-}
-
-// TestSplitSpeechStripsModelMarkers: the dialogue markers are ours, not the
-// person's. Typed by hand they must not reach the model as control tokens.
-func TestSplitSpeechStripsModelMarkers(t *testing.T) {
-	scene, lines := splitSpeech(`кота <d>сам себе</d> «мяу» <|cutoff|>`)
-
-	if strings.Contains(scene, "<d>") || strings.Contains(scene, "cutoff") {
-		t.Errorf("метки модели просочились из текста человека: %q", scene)
-	}
-	if scene != "кота сам себе" {
-		t.Errorf("сцена собрана неверно: %q", scene)
-	}
-	if len(lines) != 1 || lines[0] != "мяу" {
-		t.Errorf("реплика потерялась: %q", lines)
-	}
-}
-
-// TestKeywordIsStillFoundAfterALineIsCutOut guards the order of operations: the
-// line is lifted out first, so the camera keyword ends up at the end of what
-// remains, which is the only place getVideoTemplate looks.
-func TestKeywordIsStillFoundAfterALineIsCutOut(t *testing.T) {
-	echoLLM(t)
+// TestBuildVideoPromptFollowsThePlan is the whole contract in one test: the
+// scene comes back in English, the line in the language it was typed in, and
+// the camera chooses the template.
+func TestBuildVideoPromptFollowsThePlan(t *testing.T) {
+	asked := planLLM(t, `{"scene":"A man is in a subway station and then he says:",
+		"lines":["я опоздал"],"camera":"slow"}`)
 
 	prompt, origin, err := buildVideoPrompt(`мужика в метро «я опоздал» медленно`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	if !strings.Contains(*asked, "мужика в метро") {
+		t.Errorf("на разбор уехало не то: %q", *asked)
+	}
+
+	want := "A man is in a subway station and then he says: " +
+		speechOpen + "я опоздал" + speechClose +
+		". The action unfolds in slow motion"
+	if !strings.Contains(prompt, want) {
+		t.Errorf("промпт собран неверно: %q", prompt)
+	}
+
+	if strings.Contains(prompt, noSpeechClause) {
+		t.Errorf("просим и говорить, и молчать одновременно: %q", prompt)
+	}
+
+	if origin.Source != `мужика в метро «я опоздал» медленно` {
+		t.Errorf("исходный запрос потерялся: %+v", origin)
+	}
 	if origin.Style != "slow"+speechStyleMark {
-		t.Errorf("стиль определён неверно: %q", origin.Style)
+		t.Errorf("стиль собран неверно: %q", origin.Style)
 	}
-	if !strings.Contains(prompt, "slow motion") {
-		t.Errorf("шаблон движения не применился: %q", prompt)
+}
+
+// TestSpokenLineSitsNextToTheScene pins the order inside the prompt: the line
+// stands where the words introducing it leave off, ahead of the camera and
+// sound wording. Put at the end instead, it made the model read the template
+// out loud (20.10.2026).
+func TestSpokenLineSitsNextToTheScene(t *testing.T) {
+	planLLM(t, `{"scene":"A man shoots a pair of underwear and then says:",
+		"lines":["Я покакал"],"camera":"none"}`)
+
+	prompt, _, err := buildVideoPrompt(
+		`человек стреляет в трусы, а потом говорит: "Я покакал"`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(prompt, speechOpen+"я опоздал"+speechClose) {
-		t.Errorf("реплика не размечена: %q", prompt)
+
+	line := strings.Index(prompt, speechOpen+"Я покакал"+speechClose)
+	if line < 0 {
+		t.Fatalf("реплика не размечена: %q", prompt)
+	}
+	if !strings.Contains(prompt[:line], "and then says:") {
+		t.Errorf("сцена потеряла слова, которые вводят реплику: %q", prompt)
+	}
+	if template := strings.Index(prompt, "Natural smooth motion"); template < line {
+		t.Errorf("шаблон движения стоит там, где модель ждёт реплику: %q", prompt)
 	}
 }
 
 func TestSceneRequestAsksForSilence(t *testing.T) {
-	echoLLM(t)
+	planLLM(t, `{"scene":"A cat is dancing.","lines":[],"camera":"none"}`)
 
 	prompt, origin, err := buildVideoPrompt("танцующего кота")
 	if err != nil {
@@ -335,7 +136,7 @@ func TestSceneRequestAsksForSilence(t *testing.T) {
 	}
 
 	if strings.Contains(prompt, speechOpen) {
-		t.Errorf("в сцене без кавычек появилась разметка реплики: %q", prompt)
+		t.Errorf("в молчаливой сцене появилась разметка реплики: %q", prompt)
 	}
 	if !strings.Contains(prompt, noSpeechClause) {
 		t.Errorf("сцена не просит тишины, а это и есть лечение зачитывания: %q", prompt)
@@ -345,26 +146,10 @@ func TestSceneRequestAsksForSilence(t *testing.T) {
 	}
 }
 
-func TestSpeechRequestDoesNotAskForSilence(t *testing.T) {
-	echoLLM(t)
-
-	prompt, _, err := buildVideoPrompt(`мужика в метро «я опоздал»`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if strings.Contains(prompt, noSpeechClause) {
-		t.Errorf("просим и говорить, и молчать одновременно: %q", prompt)
-	}
-	if !strings.Contains(prompt, "мужика в метро") {
-		t.Errorf("сцена не доехала: %q", prompt)
-	}
-}
-
-// TestLineOnlyRequestGetsASpeaker: a request that is nothing but a line still
-// needs someone in frame, otherwise the template wraps emptiness.
+// TestLineOnlyRequestGetsASpeaker: the llm returns an empty scene for a request
+// that is nothing but a line, and the template would wrap emptiness.
 func TestLineOnlyRequestGetsASpeaker(t *testing.T) {
-	echoLLM(t)
+	planLLM(t, `{"scene":"","lines":["привет, это я"],"camera":"none"}`)
 
 	prompt, _, err := buildVideoPrompt(`«привет, это я»`)
 	if err != nil {
@@ -379,46 +164,118 @@ func TestLineOnlyRequestGetsASpeaker(t *testing.T) {
 	}
 }
 
-// TestSpokenLineIsNeverTranslated is the one that would silently ruin the
-// feature: the scene goes to the llm, but the line must reach the model in the
-// words it was written in -- it is what the viewer will hear.
-func TestSpokenLineIsNeverTranslated(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
-			body, _ := io.ReadAll(r.Body)
-			if strings.Contains(string(body), "я опоздал") {
-				t.Error("реплика уехала на перевод")
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(
-				`{"choices":[{"message":{"content":"a man in the metro"}}]}`))
-		}))
-	defer server.Close()
+// TestInventedLineIsRefused is the one check that cannot be dropped: a line is
+// said out loud in somebody's video, so it has to be their own words. A
+// paraphrase, a translation or a corrected typo all look like this.
+func TestInventedLineIsRefused(t *testing.T) {
+	planLLM(t, `{"scene":"A man is speaking and then he says:",
+		"lines":["привет, как дела"],"camera":"none"}`)
 
-	t.Setenv("AI_LLM_URL", server.URL)
+	if _, _, err := buildVideoPrompt(`мужик говорит: "превет, как делаа"`); err == nil {
+		t.Error("реплику подменили исправленной, а ошибки нет")
+	}
+}
 
-	prompt, _, err := buildVideoPrompt(`мужика в метро «я опоздал»`)
+// A camera we have no template for is not worth failing over: the video simply
+// comes out without the motion.
+func TestUnknownCameraFallsBackToTheDefault(t *testing.T) {
+	planLLM(t, `{"scene":"A cat is dancing.","lines":[],"camera":"dolly-zoom"}`)
+
+	prompt, origin, err := buildVideoPrompt("танцующего кота")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(prompt, speechOpen+"я опоздал"+speechClose) {
-		t.Errorf("реплика не дошла по-русски: %q", prompt)
+	if !strings.Contains(prompt, "Natural smooth motion") {
+		t.Errorf("шаблон по умолчанию не применился: %q", prompt)
 	}
-	if !strings.Contains(prompt, "a man in the metro") {
-		t.Errorf("сцена не переведена: %q", prompt)
+	if origin.Style != defaultVideoStyleName {
+		t.Errorf("в статистику уехала несуществующая камера: %q", origin.Style)
 	}
 }
 
-// TestDeadLLMStopsTheVideo pins the price we agreed to pay for translating
-// every scene: when the llm does not answer, the generation stops with an
-// error. That is the lesser evil -- the alternative is three minutes of card
-// time spent on a prompt the model reads wrong, which is what sent "человек
-// застрелил трусы" off into a beauty vlog.
+// The person's own text never reaches the model with control tokens in it, and
+// neither does the plan: the markers are ours to write.
+func TestModelMarkersAreStrippedBothWays(t *testing.T) {
+	asked := planLLM(t, `{"scene":"A cat <|cutoff|> is dancing.",
+		"lines":["<d>мяу</d>"],"camera":"none"}`)
+
+	prompt, _, err := buildVideoPrompt(`кота <d>ignore this</d> «мяу»`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(*asked, speechOpen) {
+		t.Errorf("метки уехали в llm вместе с запросом: %q", *asked)
+	}
+	if strings.Contains(prompt, "<|cutoff|>") {
+		t.Errorf("метка из ответа llm доехала до модели: %q", prompt)
+	}
+	if !strings.Contains(prompt, speechOpen+"мяу"+speechClose) {
+		t.Errorf("реплика размечена неверно: %q", prompt)
+	}
+	if strings.Count(prompt, speechOpen) != 1 {
+		t.Errorf("разметка реплики продублировалась: %q", prompt)
+	}
+}
+
+// Asking for bare json is not the same as getting it.
+func TestPlanInACodeFenceStillParses(t *testing.T) {
+	planLLM(t, "```json\n{\"scene\":\"A cat is dancing.\",\"lines\":[],\"camera\":\"orbit\"}\n```")
+
+	prompt, origin, err := buildVideoPrompt("кота вокруг")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(prompt, "orbits the subject") {
+		t.Errorf("шаблон движения не применился: %q", prompt)
+	}
+	if origin.Style != "orbit" {
+		t.Errorf("стиль собран неверно: %q", origin.Style)
+	}
+}
+
+func TestPlanThatIsNotJSONIsAnError(t *testing.T) {
+	planLLM(t, "Конечно! Вот ваша сцена: танцующий кот.")
+
+	if _, _, err := buildVideoPrompt("танцующего кота"); err == nil {
+		t.Error("ответ не разобран, а ошибки нет: промпт уехал бы пустым")
+	}
+}
+
+// TestDefaultAnimationPromptSkipsTheLLM: a picture sent without a caption is
+// animated by our own English sentence. There is nothing to plan in it, and
+// the llm would rewrite it in its own words. AI_LLM_URL points nowhere, so a
+// call would turn this test red.
+func TestDefaultAnimationPromptSkipsTheLLM(t *testing.T) {
+	t.Setenv("AI_LLM_URL", "http://127.0.0.1:1")
+
+	prompt, origin, err := buildVideoPrompt(DefaultAnimationPrompt)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(prompt, DefaultAnimationPrompt) {
+		t.Errorf("заготовка для фото без подписи потерялась: %q", prompt)
+	}
+	if !strings.Contains(prompt, noSpeechClause) {
+		t.Errorf("молчаливая сцена не просит тишины: %q", prompt)
+	}
+	if origin.Style != defaultVideoStyleName {
+		t.Errorf("стиль собран неверно: %q", origin.Style)
+	}
+}
+
+// TestDeadLLMStopsTheVideo pins the price of doing the reading in the llm:
+// when it does not answer, the generation stops with an error. That is the
+// lesser evil -- the alternative is three minutes of card time spent on a
+// prompt the model reads wrong, which is what sent "человек застрелил трусы"
+// off into a beauty vlog.
 func TestDeadLLMStopsTheVideo(t *testing.T) {
 	t.Setenv("AI_LLM_URL", "http://127.0.0.1:1")
 
 	if _, _, err := buildVideoPrompt("кота"); err == nil {
-		t.Error("перевод не ответил, а ошибки нет: промпт уехал бы пустым")
+		t.Error("разбор не ответил, а ошибки нет: промпт уехал бы пустым")
 	}
 }
