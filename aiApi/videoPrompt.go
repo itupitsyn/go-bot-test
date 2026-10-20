@@ -1,8 +1,8 @@
 package aiApi
 
 import (
-	"os"
 	"strings"
+	"unicode"
 )
 
 // Motion templates for video: the same thing as styles for images, except the
@@ -46,13 +46,14 @@ const defaultVideoSubject = "the scene comes to life"
 // whose meaning we have not established. Whatever stands inside the markers is
 // said out loud; whatever stands outside describes the shot.
 //
-// WHY WE NEEDED THIS. While the subject was translated into English, the
-// request read to the model as a caption and it filmed the scene. With the
-// subject left in Russian (see videoTranslateEnv) H3 started taking the
+// WHY WE NEEDED THIS. For the few days the scene went to the model in Russian
+// (16.10.2026 to 20.10.2026, see needsTranslation) H3 started taking the
 // request for the line itself: almost every video came out as a person facing
 // the camera reciting the prompt. Which is a fair reading -- nothing in a bare
-// phrase says whether it is a description or a quote. Now the prompt says
-// which, in the model's own notation.
+// phrase says whether it is a description or a quote. The markers say which,
+// in the model's own notation, and they stay now that the scene is translated
+// again: the line itself is still Russian, and it is the one part that has to
+// be told apart from the description.
 //
 // The markers cost two tokens each and no speed.
 const (
@@ -174,39 +175,40 @@ func speechBlocks(lines []string) string {
 	return strings.Join(out, " ")
 }
 
-// videoTranslateEnv turns translation of the video subject back on.
+// needsTranslation reports whether the subject has anything to translate: a
+// Cyrillic letter anywhere in it.
 //
-// Off since 16.10.2026: H3 reads the prompt with a Qwen3-VL 32B encoder
-// (CLIPLoader of qwen3vl_32b_minimax_h3_nvfp4_awq, type minimax), and that is
-// a multilingual model, so Russian can go to it as typed. What this buys is
-// exactly what the translation used to cost:
+// WHY THE SCENE IS TRANSLATED AT ALL. It was not, from 16.10.2026 to
+// 20.10.2026: H3 reads the prompt with a Qwen3-VL 32B encoder (CLIPLoader of
+// qwen3vl_32b_minimax_h3_nvfp4_awq, type minimax), that encoder is
+// multilingual, and Russian did reach it. The encoder was never the problem --
+// the model behind it was captioned in English. An ordinary scene survives the
+// crossing: "бородатый мужик колет дрова во дворе зимой" came out exactly as
+// asked. A short or far-fetched request does not: the aim blurs and the model
+// falls back on its strongest habit, a person in front of the camera. On
+// 20.10.2026 "человек застрелил трусы" came out a beauty vlog, while the same
+// request in English ("a man shooting down the pants") came out right -- both
+// are in the job history, 19:19 against 19:30. That habit is the same one that
+// used to make the model recite the prompt out loud; the markers below took
+// away its voice, not the habit itself.
 //
-//   - a round trip to the llm before every single video, and it was on the
-//     critical path -- the person waited for it before the queue even saw the
-//     request;
-//   - one more thing that could fail: a translation error aborted the whole
-//     generation (see buildVideoPrompt), and the llm shares a card with
-//     everything else;
-//   - everything a translation flattens. Names, local references and wordplay
-//     come back as a generic English paraphrase, and the model then draws the
-//     paraphrase.
+// So the subject goes to the llm, always, with the price known and accepted:
+// one round trip before every video, on the critical path, and a dead llm
+// aborts the generation (see buildVideoPrompt) instead of sending a prompt the
+// model would misread. There is no switch for this any more -- the choice has
+// been measured, and a second lever would only be one more thing to get wrong.
 //
-// Kept as a switch rather than deleted, because the gain above is a claim we
-// have not measured against our own prompts. If adherence turns out worse in
-// Russian, AI_VIDEO_TRANSLATE=1 plus a restart puts it back -- no rebuild, no
-// deploy.
-const videoTranslateEnv = "AI_VIDEO_TRANSLATE"
-
-// translateVideoPrompts reports whether the subject should be translated
-// before it goes into the template.
-//
-// Only an explicit word turns it on. Absent, empty or misspelled all mean
-// off, which is the behaviour we want by default: a forgotten variable must
-// not quietly cost a second per video.
-func translateVideoPrompts() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(videoTranslateEnv))) {
-	case "1", "on", "yes", "true", "вкл":
-		return true
+// What is NOT translated: the line in quotes, which is said out loud and must
+// be heard in the words it was written in, and a subject with no Cyrillic in
+// it. The llm is told the same rule ("translate if it is Russian, otherwise
+// leave it as is"), but deciding it here costs nothing -- and it keeps our own
+// English defaults, such as the one a captionless photo arrives with, from
+// coming back as somebody's paraphrase.
+func needsTranslation(text string) bool {
+	for _, r := range text {
+		if unicode.Is(unicode.Cyrillic, r) {
+			return true
+		}
 	}
 
 	return false
@@ -328,18 +330,16 @@ func getVideoPrompt(msgText string) string {
 // buildVideoPrompt assembles the final prompt: it takes what the person asked
 // for and wraps it in the template of the chosen motion. Anything they put in
 // quotes becomes a spoken line instead of part of the description, and what is
-// left is the scene. The subject is translated on the way only if
-// AI_VIDEO_TRANSLATE says so.
+// left is the scene.
 //
-// The templates stay English even when the subject does not, and the mix is
-// deliberate. Camera and motion wording ("a slow cinematic push-in", "the
-// camera slowly orbits") is the vocabulary the training captions are written
-// in, so it is the half that has least to gain from being translated; the
-// subject is the half where Russian carries meaning no paraphrase keeps.
+// Everything the model is asked to SHOW ends up in English -- the motion
+// templates were written that way, and the scene is translated on the way (see
+// needsTranslation). The only part left in the language it was typed in is
+// what the model is asked to SAY: the line in quotes.
 //
 // It also reports where the prompt came from. Everything the assembly does --
-// cutting the keyword, lifting the lines out, wrapping, and translating when
-// it is on -- is lossy, and the raw request is worth keeping: see promptOrigin.
+// cutting the keyword, lifting the lines out, wrapping and translating -- is
+// lossy, and the raw request is worth keeping: see promptOrigin.
 func buildVideoPrompt(msgText string) (string, promptOrigin, error) {
 	scene, lines := splitSpeech(msgText)
 
@@ -358,7 +358,7 @@ func buildVideoPrompt(msgText string) (string, promptOrigin, error) {
 		}
 	}
 
-	if translateVideoPrompts() {
+	if needsTranslation(subject) {
 		translated, err := translatePrompt(subject)
 		if err != nil {
 			return "", origin, err
