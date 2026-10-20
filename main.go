@@ -90,6 +90,10 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.Admin{}); err != nil {
 		log.Fatal("Error migrating Admin", err)
 	}
+	// Строго до AutoMigrate: подробности в самой функции.
+	if err := model.GivePhrazesAnID(db); err != nil {
+		log.Fatal("Error giving phrazes their own id", err)
+	}
 	if err := db.AutoMigrate(&model.Phraze{}); err != nil {
 		log.Fatal("Error migrating Phraze", err)
 	}
