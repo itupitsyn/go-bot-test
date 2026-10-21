@@ -164,15 +164,29 @@ func TestLineOnlyRequestGetsASpeaker(t *testing.T) {
 	}
 }
 
-// TestInventedLineIsRefused is the one check that cannot be dropped: a line is
-// said out loud in somebody's video, so it has to be their own words. A
-// paraphrase, a translation or a corrected typo all look like this.
-func TestInventedLineIsRefused(t *testing.T) {
+// A line that came back changed is used anyway: the request must not die over
+// it.
+//
+// Until 21.10.2026 this very case was an error -- the line had to appear in the
+// request verbatim. It cost a live video: the llm turned «ребятки» into
+// «ребята», the check refused the plan, and the person got "сервер подох"
+// instead of a clip. The only thing asking for the words to be exact is now
+// videoPlanPrompt, and this test exists to keep the refusal from coming back by
+// accident.
+func TestRewordedLineIsUsedAnyway(t *testing.T) {
 	planLLM(t, `{"scene":"A man is speaking and then he says:",
 		"lines":["привет, как дела"],"camera":"none"}`)
 
-	if _, _, err := buildVideoPrompt(`мужик говорит: "превет, как делаа"`); err == nil {
-		t.Error("реплику подменили исправленной, а ошибки нет")
+	prompt, origin, err := buildVideoPrompt(`мужик говорит: "превет, как делаа"`)
+	if err != nil {
+		t.Fatalf("исправленная реплика завалила запрос: %v", err)
+	}
+
+	if !strings.Contains(prompt, speechOpen+"привет, как дела"+speechClose) {
+		t.Errorf("реплика не доехала до промпта: %q", prompt)
+	}
+	if !strings.HasSuffix(origin.Style, speechStyleMark) {
+		t.Errorf("речь не отмечена в статистике: %q", origin.Style)
 	}
 }
 

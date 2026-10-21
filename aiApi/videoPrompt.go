@@ -181,11 +181,11 @@ func planVideo(request string) (videoPlan, error) {
 		return videoPlan{}, err
 	}
 
-	return parseVideoPlan(answer, request)
+	return parseVideoPlan(answer)
 }
 
 // parseVideoPlan reads the answer and refuses what it cannot vouch for.
-func parseVideoPlan(answer, request string) (videoPlan, error) {
+func parseVideoPlan(answer string) (videoPlan, error) {
 	var plan videoPlan
 	if err := json.Unmarshal([]byte(unfence(answer)), &plan); err != nil {
 		return videoPlan{}, fmt.Errorf("video plan is not valid json (%w): %s", err, answer)
@@ -206,14 +206,23 @@ func parseVideoPlan(answer, request string) (videoPlan, error) {
 			continue
 		}
 
-		// A line the person did not write is the one failure we cannot let
-		// through: it would be said out loud in their video. Paraphrases,
-		// translations and helpfully corrected typos are all caught here --
-		// the words have to be in the request as they came.
-		if !strings.Contains(strings.ToLower(request), strings.ToLower(line)) {
-			return videoPlan{}, fmt.Errorf("video plan invented a line %q, request was %q", line, request)
-		}
-
+		// Here stood a check that every line appears in the request verbatim:
+		// a line gets said out loud in somebody's video, so it had to be their
+		// own words. Removed 21.10.2026, and the reason is measured rather than
+		// aesthetic. On
+		//
+		//	встаёт со стула и уходит, говоря "Идите вы все в жопу, ребятки"
+		//
+		// the llm returned the line with "ребята" -- one letter -- and the
+		// check failed the request whole. Upstream that arrives as an ordinary
+		// error, the bot says "сервер подох", and the person loses a video over
+		// a typo correction nobody would have noticed in the audio.
+		//
+		// What guards the words now is videoPlanPrompt, which asks for them
+		// copied exactly, mistakes and all. If paraphrases or translations do
+		// start showing up, the repair is cheaper than the refusal was: the
+		// person's own text sits in the quotes of the request, and a line that
+		// does not match can be replaced with it instead of killing the job.
 		lines = append(lines, line)
 	}
 	plan.Lines = lines
