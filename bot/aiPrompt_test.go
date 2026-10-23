@@ -184,7 +184,7 @@ func TestAnimationPromptLeavesTheRepliedTextAsScene(t *testing.T) {
 	}
 
 	want := "Он сказал я устал котика"
-	if got := buildAnimationPrompt(message, "анимируй", "animate"); got != want {
+	if got, _ := buildAnimationRequest(message, "анимируй", "animate"); got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
 }
@@ -198,7 +198,7 @@ func TestAnimationPromptKeepsTheTypedLine(t *testing.T) {
 	}
 
 	want := `котик на подоконнике «мяу» медленно`
-	if got := buildAnimationPrompt(message, "анимируй", "animate"); got != want {
+	if got, _ := buildAnimationRequest(message, "анимируй", "animate"); got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
 }
@@ -219,8 +219,8 @@ func TestAnimationPromptKeepsTheMarkRightAfterTheKeyword(t *testing.T) {
 
 	for _, c := range cases {
 		message := &models.Message{Text: c.text}
-		if got := buildAnimationPrompt(message, "анимируй", "animate"); got != c.want {
-			t.Errorf("buildAnimationPrompt(%q) = %q, want %q", c.text, got, c.want)
+		if got, _ := buildAnimationRequest(message, "анимируй", "animate"); got != c.want {
+			t.Errorf("buildAnimationRequest(%q) = %q, want %q", c.text, got, c.want)
 		}
 	}
 }
@@ -234,7 +234,7 @@ func TestAnimationPromptDoesNotPairMarksAcrossTheHalves(t *testing.T) {
 	}
 
 	want := `он сказал вот так мужика» в метро`
-	if got := buildAnimationPrompt(message, "анимируй", "animate"); got != want {
+	if got, _ := buildAnimationRequest(message, "анимируй", "animate"); got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
 }

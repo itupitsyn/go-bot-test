@@ -2,6 +2,7 @@ package aiApi
 
 import (
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -38,6 +39,30 @@ const (
 	videoPollInterval = 10 * time.Second
 	videoMaxWait      = time.Hour
 )
+
+// formatSeconds renders a clip length for the wire: "10", not "10.000000". An
+// empty string means the length was not asked for, and then the field is left
+// out of the request altogether -- the service puts in its own default, and
+// the request stays byte for byte what it was before lengths existed.
+func formatSeconds(seconds float64) string {
+	if seconds <= 0 {
+		return ""
+	}
+
+	return strconv.FormatFloat(seconds, 'f', -1, 64)
+}
+
+// secondsJSON is the clip length for a json request body, leading comma
+// included, the same shape as Caller.userJSON. Empty when no length was asked
+// for.
+func secondsJSON(seconds float64) string {
+	value := formatSeconds(seconds)
+	if value == "" {
+		return ""
+	}
+
+	return `, "seconds": ` + value
+}
 
 // waitVideoResult polls the video service /api/result endpoint until the
 // generation is finished and returns the decoded video bytes.

@@ -175,7 +175,10 @@ func generateInlineTextVideo(ctx context.Context, b *bot.Bot, inlineMessageId st
 	caller := inlineCaller(userID, wait)
 	caller.OnJobID = note.onJobID
 
-	videoBytes, err := aiApi.GetT2V(queryData.query, caller)
+	// Длину из inline не просят: этот путь не проходит через лимит вовсе
+	// (refuseAiCommand тут нет), и заказывать отсюда работу втрое тяжелее
+	// нечем. Пять секунд.
+	videoBytes, err := aiApi.GetT2V(queryData.query, 0, caller)
 	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating t2v: %w", err)
@@ -211,7 +214,8 @@ func generateInlineVideo(ctx context.Context, b *bot.Bot, inlineMessageId string
 	caller := inlineCaller(userID, wait)
 	caller.OnJobID = note.onJobID
 
-	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imageName, caller)
+	// Пять секунд, по той же причине, что и в generateInlineTextVideo.
+	videoBytes, err := aiApi.GetI2V(prompt, imageBytes, imageName, 0, caller)
 	wait.done()
 	if err != nil {
 		return fmt.Errorf("generating i2v: %w", err)

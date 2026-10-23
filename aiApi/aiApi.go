@@ -19,13 +19,18 @@ func GetImageEdit(msgText string, images []EditImage, caller Caller) ([]byte, er
 	return generateImageEdit(msgText, images, caller)
 }
 
-func GetI2V(msgText string, imageBytes []byte, imageName string, caller Caller) ([]byte, error) {
-	err, video := generateI2V(msgText, imageBytes, imageName, caller)
+// seconds is the clip length that was asked for. Zero leaves the choice to the
+// service, which means its own five seconds, and the request then goes out
+// exactly as it did before lengths existed. Asking for more than the service
+// allows (VIDEO_MAX_SECONDS there) is pointless: it clamps the request to what
+// the model was trained on and to what it is willing to hold a card for.
+func GetI2V(msgText string, imageBytes []byte, imageName string, seconds float64, caller Caller) ([]byte, error) {
+	err, video := generateI2V(msgText, imageBytes, imageName, seconds, caller)
 	return video, err
 }
 
-func GetT2V(msgText string, caller Caller) ([]byte, error) {
-	err, video := generateT2V(msgText, caller)
+func GetT2V(msgText string, seconds float64, caller Caller) ([]byte, error) {
+	err, video := generateT2V(msgText, seconds, caller)
 	return video, err
 }
 

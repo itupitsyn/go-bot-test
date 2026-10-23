@@ -78,15 +78,23 @@ func buildAiPrompt(message *models.Message, keywords ...string) string {
 	return joinPrompt(replyPrompt(message), commandPrompt(message, keywords...))
 }
 
-// buildAnimationPrompt does the same for the animator, with one difference: the
-// text being replied to goes in as a description of the scene and nothing else.
-// Quotation marks in it are an ordinary quotation — it is somebody else's
-// message, and whoever wrote it was not asking for words to be said out loud.
-// Asking for a line stays with the person typing the command.
-func buildAnimationPrompt(message *models.Message, keywords ...string) string {
+// buildAnimationRequest reads an animator command: the prompt and the length
+// of the clip to make.
+//
+// The prompt differs from buildAiPrompt in one way: the text being replied to
+// goes in as a description of the scene and nothing else. Quotation marks in it
+// are an ordinary quotation — it is somebody else's message, and whoever wrote
+// it was not asking for words to be said out loud. Asking for a line stays with
+// the person typing the command.
+//
+// The length is read ONLY out of what that person typed. In the message being
+// replied to "10 секунд" are somebody else's words and a part of the scene.
+// Zero means no length was asked for.
+func buildAnimationRequest(message *models.Message, keywords ...string) (string, float64) {
+	seconds, command := cutVideoSeconds(commandPrompt(message, keywords...))
 	scene := dropQuotationMarks(replyPrompt(message))
 
-	return joinPrompt(scene, commandPrompt(message, keywords...))
+	return joinPrompt(scene, command), seconds
 }
 
 // commandPrompt returns what is left of the command message once the keyword is

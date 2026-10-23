@@ -143,10 +143,13 @@ func getHandler() bot.HandlerFunc {
 			} else if isCommand(msgTextLower, "анимируй", "animate") {
 				log.Println("Video generation requested by", userName)
 				if !replyIfMaintenance(ctx, b, update.Message) {
+					// Разбор ДО списания: длина ролика — это то, за что потом
+					// берётся плата, и знать её надо раньше, чем решается,
+					// хватает ли человеку квоты.
+					prompt, seconds := buildAnimationRequest(update.Message, "анимируй", "animate")
 					if charge, refused := refuseAiCommand(ctx, b, update.Message, aiKindVideo); !refused {
 						wait := sendWaitMessage(chatId, update.Message.ID)
-						processVideoGeneration(ctx, b, update, wait,
-							buildAnimationPrompt(update.Message, "анимируй", "animate"), charge)
+						processVideoGeneration(ctx, b, update, wait, prompt, seconds, charge)
 					}
 				}
 			} else if isCommand(msgTextLower, "расшифруй", "transcribe") {

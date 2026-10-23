@@ -285,7 +285,9 @@ func processImageEdit(ctx context.Context, b *bot.Bot, update *models.Update, wa
 	})
 }
 
-func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, charge *aiCharge) {
+// seconds — запрошенная длина ролика; ноль значит, что длину не просили, и
+// сервис возьмёт свои пять секунд.
+func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Update, wait *waitMessage, prompt string, seconds float64, charge *aiCharge) {
 	chatId := update.Message.Chat.ID
 
 	// Вид один на i2v и t2v: подбор спрашивает результат по имени, а чем задача
@@ -343,6 +345,13 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 		prompt = defaultAnimationPrompt
 	}
 
+	// В логе длина нужна: десятисекундный ролик занимает карту минут на
+	// девять, и, увидев такое ожидание, надо сразу понимать, попросили его или
+	// сервис задумался.
+	if seconds > 0 {
+		log.Printf("Video length asked: %.0f s", seconds)
+	}
+
 	var videoBytes []byte
 	var err error
 
@@ -350,9 +359,9 @@ func processVideoGeneration(ctx context.Context, b *bot.Bot, update *models.Upda
 	caller.OnJobID = note.onJobID
 
 	if imageBytes != nil {
-		videoBytes, err = aiApi.GetI2V(prompt, imageBytes, imageName, caller)
+		videoBytes, err = aiApi.GetI2V(prompt, imageBytes, imageName, seconds, caller)
 	} else {
-		videoBytes, err = aiApi.GetT2V(prompt, caller)
+		videoBytes, err = aiApi.GetT2V(prompt, seconds, caller)
 	}
 	wait.done()
 
@@ -934,7 +943,10 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"Если приложить своё фото в ответ на чужое, бот смешает оба: «нарисуй её за этим столом».\n\n" +
 		"<b>Видео</b>\n" +
 		"«Анимируй танцующего котика» — бот сделает видео по описанию.\n" +
-		"Если отправить картинку с подписью «Анимируй ...» или ответить «Анимируй» на сообщение с картинкой, бот оживит именно её.\n\n" +
+		"Если отправить картинку с подписью «Анимируй ...» или ответить «Анимируй» на сообщение с картинкой, бот оживит именно её.\n" +
+		fmt.Sprintf("Ролик выходит %.0f секунд. Нужен длиннее — скажи, сколько, в самом начале или в самом конце просьбы: «Анимируй котика %.0f секунд». Больше %.0f не делаю.\n",
+			videoSecondsDefault, videoSecondsMax, videoSecondsMax) +
+		"Считается длинный ролик втрое дольше короткого — и ждать придётся втрое.\n\n" +
 		"<b>Движение камеры</b>\n" +
 		"Допиши в конце медленно, вокруг, ближе, дальше, сверху или живо — и камера поведёт себя соответственно.\n" +
 		"Например: «Анимируй котика вокруг» — камера обойдёт его по кругу.\n" +
@@ -966,7 +978,8 @@ func processAIHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 		"<b>Английский</b>\n" +
 		"Всё то же самое: «draw a cat meha», «animate a dancing cat around», «transcribe», «summarize».\n" +
 		"Стили — anime, realistic, cyberpunk, meha. Камера — slowly, around, closer, wider, above, lively.\n" +
-		"Реплика — тоже в кавычках: animate a man in the metro \"I am late again\".\n\n" +
+		"Реплика — тоже в кавычках: animate a man in the metro \"I am late again\".\n" +
+		"Длина — тоже словами: animate a cat 10 seconds.\n\n" +
 		"<b>Inline-режим</b>\n" +
 		fmt.Sprintf("Набери в любом чате @%s и промпт — добавлять меня в этот чат не нужно.\n", botName) +
 		"«Что рисуем?» — картинка, «Что анимируем?» — видео по описанию.\n\n" +
