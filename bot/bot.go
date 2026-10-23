@@ -54,7 +54,10 @@ func getHandler() bot.HandlerFunc {
 				log.Println(err)
 			}
 
-			if update.CallbackQuery.Data == aiBuyCallback {
+			// Приставка, а не равенство: за ней едет размер пачки. Ключи
+			// карты запросов — uuid-ы, двоеточия в них не бывает.
+			if update.CallbackQuery.Data == aiBuyCallback ||
+				strings.HasPrefix(update.CallbackQuery.Data, aiBuyCallback+":") {
 				log.Println("Stars invoice requested by", userName)
 				processAiBuyCallback(ctx, b, update)
 				return
@@ -143,11 +146,11 @@ func getHandler() bot.HandlerFunc {
 			} else if isCommand(msgTextLower, "анимируй", "animate") {
 				log.Println("Video generation requested by", userName)
 				if !replyIfMaintenance(ctx, b, update.Message) {
-					// Разбор ДО списания: длина ролика — это то, за что потом
+					// Разбор ДО списания: длина ролика — это то, за что
 					// берётся плата, и знать её надо раньше, чем решается,
 					// хватает ли человеку квоты.
 					prompt, seconds := buildAnimationRequest(update.Message, "анимируй", "animate")
-					if charge, refused := refuseAiCommand(ctx, b, update.Message, aiKindVideo); !refused {
+					if charge, refused := refuseAiVideoCommand(ctx, b, update.Message, seconds); !refused {
 						wait := sendWaitMessage(chatId, update.Message.ID)
 						processVideoGeneration(ctx, b, update, wait, prompt, seconds, charge)
 					}
@@ -172,6 +175,9 @@ func getHandler() bot.HandlerFunc {
 			} else if strings.HasPrefix(msgTextLower, "/ai_help") || strings.HasPrefix(msgTextLower, "/ai_help@"+botName) {
 				log.Println("AI help requested by", userName)
 				processAIHelp(ctx, b, update)
+			} else if strings.HasPrefix(msgTextLower, "/ai_balance") || strings.HasPrefix(msgTextLower, "/ai_balance@"+botName) {
+				log.Println("AI balance requested by", userName)
+				processAiBalance(ctx, b, update.Message)
 			} else if strings.HasPrefix(msgTextLower, "/privacy") || strings.HasPrefix(msgTextLower, "/privacy@"+botName) {
 				log.Println("Data notice requested by", userName)
 				processDataNotice(ctx, b, update)

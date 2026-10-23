@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// AiCredit is how many generations a person has bought and not yet spent.
+// AiCredit is how many points a person has bought and not yet spent.
 //
 // Bought units are a SEPARATE pocket from the free quota, not an addition to
 // it. The quota is a sliding window over ai_usages — raising it would hand the
@@ -24,8 +24,12 @@ import (
 // No row means no bought units, which is the normal state for almost everybody.
 type AiCredit struct {
 	UserID int64 `gorm:"primaryKey"`
-	// Balance is in generations, not in stars: the price may change, and a
-	// balance in money would have to be re-divided by a new price every time.
+	// Balance is in points, not in stars: the price may change, and a balance
+	// in money would have to be re-divided by a new price every time.
+	//
+	// До 24.10.2026 это были «генерации», по одной на любую команду. Цифры в
+	// столбце не пересчитывались сами: остатки перенесены руками по тому, что
+	// на них можно было сделать (ролик — десять баллов), а не один к одному.
 	Balance   int `gorm:"not null;default:0"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -109,8 +113,8 @@ func SpendAiCredit(userID int64, units int) (bool, error) {
 // CreditAiPurchase records a payment and puts the units in the pocket, once.
 //
 // Returns false when this payment has already been counted: Telegram repeats
-// an update it thinks went unanswered, and without this the same five stars
-// would buy twenty generations as many times as the repeat happens.
+// an update it thinks went unanswered, and without this the same ten stars
+// would buy a hundred points as many times as the repeat happens.
 //
 // Both writes go in one transaction, so a crash between them cannot leave a
 // payment recorded but not granted, or granted but not recorded.

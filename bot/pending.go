@@ -434,11 +434,11 @@ func giveUpDelivery(ctx context.Context, b *bot.Bot, row model.PendingDelivery) 
 		if err := model.AddAiCredit(row.UserID, row.PaidUnits); err != nil {
 			// Та же строка, что и в setUnits: это единственный след, по
 			// которому потом разобраться.
-			log.Printf("[error] не вернул %d оплаченных генераций пользователю %d: %v\n",
+			log.Printf("[error] не вернул %d оплаченных баллов пользователю %d: %v\n",
 				row.PaidUnits, row.UserID, err)
 		} else {
 			text = resumeRefundedText
-			log.Printf("Вернул %d оплаченных генераций пользователю %d за потерянную задачу\n",
+			log.Printf("Вернул %d оплаченных баллов пользователю %d за потерянную задачу\n",
 				row.PaidUnits, row.UserID)
 		}
 	}

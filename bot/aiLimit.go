@@ -104,7 +104,7 @@ func (c *aiCharge) setUnits(used int) {
 		if err := model.AddAiCredit(c.userID, backPaid); err != nil {
 			// Человек заплатил, работа не вся сделалась, а вернуть не вышло.
 			// Кричим: это единственный след, по которому потом разобраться.
-			log.Printf("[error] не вернул %d оплаченных генераций пользователю %d: %v\n",
+			log.Printf("[error] не вернул %d оплаченных баллов пользователю %d: %v\n",
 				backPaid, c.userID, err)
 		}
 	}
@@ -142,8 +142,8 @@ func chargeAiLimit(userID int64, kind string, units int) (*aiCharge, string, boo
 	}
 
 	// Бесплатное доедаем ДО копейки и платим только за остаток. Иначе человек
-	// с девятью свободными генерациями и набором на десять заплатил бы за все
-	// десять, хотя сверх лимита у него только одна.
+	// с девятью свободными баллами и роликом за десять заплатил бы все десять,
+	// хотя сверх лимита у него один балл.
 	free := limit.Amount - used
 	if free < 0 {
 		free = 0
@@ -218,15 +218,29 @@ func replyIfOverAiLimit(ctx context.Context, b *bot.Bot, message *models.Message
 	return nil, true
 }
 
-// refuseAiCommand is the single-picture case: charge one unit, answer if there
-// is none left.
+// refuseAiCommand is the single-command case: charge what this kind costs,
+// answer if there is not enough left.
+//
+// Цену берём из таблицы, а не из места вызова: до 24.10.2026 здесь стояла
+// единица, и ролик обходился человеку ровно как правка картинки, хотя занимает
+// карту в девять раз дольше. Теперь все три точки входа спрашивают цену по
+// виду работы — см. aiPoints.
 //
 // The charge comes back so that a generation which never happened can be given
-// back. It matters most for bought units — taking somebody's money for a
-// picture the service refused to draw is plain theft — but free units are
+// back. It matters most for bought points — taking somebody's money for a
+// picture the service refused to draw is plain theft — but free ones are
 // returned the same way: the sticker pack has behaved like that since it was
 // written, and two rules for the same thing would be worse than one.
 func refuseAiCommand(ctx context.Context, b *bot.Bot, message *models.Message,
 	kind string) (*aiCharge, bool) {
-	return replyIfOverAiLimit(ctx, b, message, kind, 1)
+	return replyIfOverAiLimit(ctx, b, message, kind, aiPoints(kind))
+}
+
+// refuseAiVideoCommand is refuseAiCommand for a clip whose length was asked
+// for. Отдельный вход, потому что цена ролика — это его длина: пять секунд
+// стоят десять баллов, десять секунд — тридцать. Ноль значит, что длину не
+// просили, и выходит обычная цена.
+func refuseAiVideoCommand(ctx context.Context, b *bot.Bot, message *models.Message,
+	seconds float64) (*aiCharge, bool) {
+	return replyIfOverAiLimit(ctx, b, message, aiKindVideo, aiVideoPoints(seconds))
 }

@@ -47,8 +47,10 @@ func AiLimitWindow(period string) time.Duration {
 // The admin panel adds a row for the few who need one.
 type AiLimit struct {
 	UserID int64 `gorm:"primaryKey" json:"user_id"`
-	// Amount is how many generations fit in the window. Zero or less means no
-	// limit — the admin panel empties the field instead of deleting the row.
+	// Amount is how many POINTS fit in the window, not how many commands:
+	// с 24.10.2026 правка картинки стоит балл, а ролик десять. Zero or less
+	// means no limit — the admin panel empties the field instead of deleting
+	// the row.
 	Amount int    `gorm:"not null;default:0" json:"amount"`
 	Period string `gorm:"size:16;not null;default:'hour'" json:"period"`
 	// Message is this person's own refusal wording. Empty means the general
@@ -72,8 +74,8 @@ type AiLimitSettings struct {
 }
 
 // AiUsage is one charge against a quota. One ROW per command, with Units
-// saying how much it cost: a sticker pack is ten generations and costs ten,
-// while a picture costs one.
+// saying how much it cost in points: a sticker pack is ten pictures and costs
+// ten, a clip costs ten, a picture edit one.
 //
 // Units lives in the row rather than in ten separate rows so that a pack that
 // came out short can be corrected afterwards by rewriting one number.
