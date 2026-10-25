@@ -3,7 +3,10 @@ package aiApi
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Motion templates for video: the same thing as styles for images, except the
@@ -151,6 +154,14 @@ type videoPlan struct {
 // The plan comes back as data, not as a prompt. The llm never writes the
 // markers itself -- otherwise a request could ask it to, and we would be
 // passing a stranger's control tokens straight to the generator.
+//
+// WHAT IS NOT WRITTEN HERE, AND WHY. The plan misreads a description as a
+// spoken line (measured 26.10.2026, see keepSpokenLines). Adding a rule about
+// it to this text was tried and MADE IT WORSE: naming the mistake raised its
+// salience, and descriptions that used to stay silent started turning up in
+// "lines" instead. Two runs of the same edited text scored 20 and 19 of 26
+// against 22 for this one, and the defect itself floats run to run. It is
+// guarded in code below. Do not reopen it here.
 const videoPlanPrompt = `You prepare prompts for a text-to-video model.
 
 The request may be in any language. Answer with ONE JSON object and nothing else:
@@ -181,11 +192,105 @@ func planVideo(request string) (videoPlan, error) {
 		return videoPlan{}, err
 	}
 
-	return parseVideoPlan(answer)
+	return parseVideoPlan(answer, request)
 }
 
-// parseVideoPlan reads the answer and refuses what it cannot vouch for.
-func parseVideoPlan(answer string) (videoPlan, error) {
+// speechMarkRe spots a request that states, in one of the ways people actually
+// do it, that something is spoken: quotation marks of either kind, or a verb of
+// speaking. Russian and English, which is what the journal holds. A stem is
+// enough -- "говор" covers говорит, говоря and говорил alike.
+var speechMarkRe = regexp.MustCompile(`[«»"“”]|говор|сказ|шепч|шепн|крич|ор[ёе]т|произнос|спрашива|отвеча|по[ёе]т|says|said|saying|shouts|whispers|asks|sings`)
+
+// speechIntroCuts are the hand-overs the plan puts at the end of a scene when
+// it means a line to follow. Longest first: "and then says" must be cut at
+// "and then", not at "says".
+var speechIntroCuts = []string{"and then", "while saying", "and says", "and say", "saying"}
+
+// keepSpokenLines decides whether what the plan put in "lines" is speech at all.
+//
+// MEASURED 26.10.2026 on the 27 unique t2v requests in the journal. The plan
+// reads a description as a quote in about one request in five: "еду съедает
+// Зеленский" went into "lines" whole, "томат крякает дуплом" had "крякает
+// дуплом" said out loud, and "в кадр заходит Трамп, крякает, потом какает" had
+// a character pronounce "крякает". A sound an animal makes reads to the llm
+// like a verb of speaking, and a request that is nothing but a description gets
+// quoted for want of anything else to put in the field. The person then gets a
+// clip of somebody reciting their own words -- the very failure the <d> markers
+// were introduced for, in its remaining half: the markers say WHAT is spoken,
+// they do not decide WHETHER anything is.
+//
+// WHY IN CODE. The obvious repair -- a rule in videoPlanPrompt -- was tried
+// and measured, and it made things worse: naming the mistake raised its
+// salience and descriptions that used to stay silent started turning up in
+// "lines". Two runs of the edited text scored 20 and 19 of 26 against 22 for
+// the text we ship. The defect also floats run to run, so no instruction can
+// be shown to have fixed it. A check does not float.
+//
+// WHY THIS CHECK AND NOT "ONLY QUOTES COUNT". It has to hold from both sides.
+// People do mean speech without marking it at all: "Надо оставить место в
+// животике на салат", "но не помним почему" and a whole poem all arrived bare
+// and are read right. What those have in common is that the request IS the
+// line, whole -- nothing is left over to film. A misread looks different: the
+// quote is a fragment of a request that also describes a scene. So an unmarked
+// request keeps its line only when the line is the entire request.
+//
+// Fixes four of the five measured misreads and costs none of the eight bare
+// lines that worked. The fifth, "еду съедает Зеленский", is a third-person
+// description that happens to equal the whole request; telling it from an
+// utterance needs meaning, not shape, and it is left alone rather than guessed
+// at.
+func keepSpokenLines(lines []string, request string) bool {
+	if len(lines) == 0 {
+		return true
+	}
+
+	if speechMarkRe.MatchString(strings.ToLower(request)) {
+		return true
+	}
+
+	return len(lines) == 1 && sameLetters(lines[0], request)
+}
+
+// sameLetters compares two texts by their letters and digits alone. The plan
+// returns a line copied out of the request, but punctuation and case travel
+// badly -- a trailing full stop or a capital is not a different sentence.
+func sameLetters(a, b string) bool {
+	return onlyLetters(a) == onlyLetters(b)
+}
+
+func onlyLetters(text string) string {
+	var out strings.Builder
+	for _, r := range strings.ToLower(text) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			out.WriteRune(r)
+		}
+	}
+
+	return out.String()
+}
+
+// trimSpeechIntro cuts the hand-over off a scene whose line has been dropped.
+// Left in place it is worse than the line was: "Zelensky is eating food, and
+// then he says:" asks the model for a speaker with nothing to say.
+func trimSpeechIntro(scene string) string {
+	if !strings.HasSuffix(scene, ":") {
+		return scene
+	}
+
+	lower := strings.ToLower(scene)
+	for _, cut := range speechIntroCuts {
+		if at := strings.LastIndex(lower, cut); at > 0 {
+			return strings.TrimRight(tidy(scene[:at]), ",;")
+		}
+	}
+
+	return strings.TrimRight(tidy(strings.TrimSuffix(scene, ":")), ",;")
+}
+
+// parseVideoPlan reads the answer and refuses what it cannot vouch for. The
+// request comes with it: some of the reading can only be judged against what
+// the person actually wrote.
+func parseVideoPlan(answer, request string) (videoPlan, error) {
 	var plan videoPlan
 	if err := json.Unmarshal([]byte(unfence(answer)), &plan); err != nil {
 		return videoPlan{}, fmt.Errorf("video plan is not valid json (%w): %s", err, answer)
@@ -226,6 +331,13 @@ func parseVideoPlan(answer string) (videoPlan, error) {
 		lines = append(lines, line)
 	}
 	plan.Lines = lines
+
+	if !keepSpokenLines(plan.Lines, request) {
+		log.Printf("video plan: dropping %q, the request neither quotes nor introduces speech: %q\n", plan.Lines, request)
+
+		plan.Lines = nil
+		plan.Scene = trimSpeechIntro(plan.Scene)
+	}
 
 	return plan, nil
 }

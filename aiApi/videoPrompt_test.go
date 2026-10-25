@@ -293,3 +293,85 @@ func TestDeadLLMStopsTheVideo(t *testing.T) {
 		t.Error("разбор не ответил, а ошибки нет: промпт уехал бы пустым")
 	}
 }
+
+// TestDescriptionIsNotRecitedAloud is the bug measured on 26.10.2026: the plan
+// pulled a fragment of a plain description into "lines", and the person got a
+// clip of someone pronouncing the word «крякает» instead of a tomato quacking.
+// Nothing in the request says anything is spoken, and what the plan quoted is
+// not even the whole of it.
+func TestDescriptionIsNotRecitedAloud(t *testing.T) {
+	planLLM(t, `{"scene":"A tomato stands on a surface, and then it says:",
+		"lines":["крякает дуплом"],"camera":"none"}`)
+
+	prompt, origin, err := buildVideoPrompt("томат крякает дуплом")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(prompt, speechOpen) {
+		t.Errorf("описание уехало репликой: %q", prompt)
+	}
+	if !strings.Contains(prompt, noSpeechClause) {
+		t.Errorf("реплику убрали, а тишины не попросили: %q", prompt)
+	}
+	if strings.Contains(strings.ToLower(prompt), "and then") {
+		t.Errorf("сцена осталась с передачей слова, а говорить уже некому: %q", prompt)
+	}
+	if origin.Style != defaultVideoStyleName {
+		t.Errorf("речь отметилась в статистике, хотя её нет: %q", origin.Style)
+	}
+}
+
+// TestBareRequestThatIsTheWholeLineStillSpeaks is the other side of the same
+// check, and the reason it is not simply "a line must come from quotes".
+// People do mean speech without marking it: this one arrived bare, and what
+// makes it a line is that it IS the request, whole, with nothing left over to
+// film. The spelling is allowed to differ -- a full stop is not a different
+// sentence.
+func TestBareRequestThatIsTheWholeLineStillSpeaks(t *testing.T) {
+	planLLM(t, `{"scene":"","lines":["Но не помним почему."],"camera":"none"}`)
+
+	prompt, origin, err := buildVideoPrompt("но не помним почему")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(prompt, speechOpen+"Но не помним почему."+speechClose) {
+		t.Errorf("задуманная реплика потерялась: %q", prompt)
+	}
+	if !strings.HasSuffix(origin.Style, speechStyleMark) {
+		t.Errorf("речь не отмечена в статистике: %q", origin.Style)
+	}
+}
+
+// A verb of speaking is enough on its own: the line may then be a fragment of
+// the request, because the rest of it is the scene.
+func TestIntroducedSpeechKeepsAFragment(t *testing.T) {
+	planLLM(t, `{"scene":"An old man stands in a field and then he says:",
+		"lines":["ура"],"camera":"none"}`)
+
+	prompt, _, err := buildVideoPrompt("дед кричит ура")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(prompt, speechOpen+"ура"+speechClose) {
+		t.Errorf("введённая глаголом реплика потерялась: %q", prompt)
+	}
+}
+
+func TestTrimSpeechIntro(t *testing.T) {
+	cases := map[string]string{
+		"Zelensky is eating food, and then he says:":       "Zelensky is eating food",
+		"Donald Trump walks into the frame and then says:": "Donald Trump walks into the frame",
+		"A person stands in a kitchen while saying:":       "A person stands in a kitchen",
+		"A goose walks into the frame and defecates.":      "A goose walks into the frame and defecates.",
+		"A tomato sits on a surface:":                      "A tomato sits on a surface",
+	}
+
+	for scene, want := range cases {
+		if got := trimSpeechIntro(scene); got != want {
+			t.Errorf("trimSpeechIntro(%q) = %q, ожидалось %q", scene, got, want)
+		}
+	}
+}
