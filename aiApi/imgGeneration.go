@@ -17,134 +17,27 @@ const (
 	imageMaxWait      = time.Hour
 )
 
-var animeSuffix = " anime"
-var animeSuffixRu = " аниме"
-var realisticSuffix = " realistic"
-var realisticSuffixRu = " реалистично"
-var cyberpunkSuffix = " cyberpunk"
-var cyberpunkSuffixRu = " киберпанк"
-var mehaSuffix = " meha"
-var mehaSuffixRu = " меха"
+// imageCommandPrefixes are the ways a request opens. Cut off before anything
+// else: they address the bot, they are not part of the picture.
+var imageCommandPrefixes = []string{"draw ", "нарисуй "}
 
-// Style templates.
+// getImagePrompt strips the command word and leaves the rest ALONE.
 //
-// The previous ones were Fooocus presets written for SDXL with CFG 5-7, where
-// padding with "quality" tokens (masterpiece, 8k, highly detailed) worked as a
-// lever: it pushed the conditional prediction away from the unconditional one.
-// Images are now drawn with guidance off, so there is no unconditional branch
-// at all, nothing to push apart, and such words turn into ordinary description
-// tokens that dilute what the person actually asked for.
-//
-// The service also uses an LLM-based text encoder, which reads a coherent
-// sentence noticeably better than a comma-separated list. Hence templates
-// written as sentences.
-//
-// Both reasons were first worked out for Z-Image Turbo (guidance_scale=0.0).
-// On 11.10.2026 the service moved to Qwen-Image-2.1-Turbo, where guidance is
-// also effectively off (true_cfg_scale=1 and no negative prompt) and the text
-// encoder is Qwen3-VL — so both reasons still hold. All four templates were
-// re-rendered on the new model with one subject and a fixed seed and hit the
-// brief unchanged, so nothing here was rewritten for the move. If the service
-// ever goes back to a CFG-driven model, this whole block needs revisiting.
-// imageStyle is a named look: the suffixes that turn it on and the template
-// that applies it. Name and template live together on purpose -- the name
-// travels to the service with every request and is what the statistics group
-// by, so a table that cannot drift is worth more than two parallel lists.
-type imageStyle struct {
-	name     string
-	suffixes []string
-	template string
-}
+// It used to lowercase the whole message, because the style keywords were
+// matched by suffix and matching had to be case-blind. The keywords are gone
+// (see promptEnhancer.go), and the lowercasing turned out to cost something:
+// the picture model draws the letters it is given, so "ВЫВЕСКА «КОФЕ»" was
+// reaching it as "вывеска «кофе»" and the sign came out in lower case. Only
+// the prefix is matched case-blind now; everything the person typed goes on
+// as typed.
+func getImagePrompt(msgText string) string {
+	text := strings.TrimSpace(msgText)
 
-var imageStyles = []imageStyle{
-	{
-		"anime",
-		[]string{animeSuffix, animeSuffixRu},
-		"%s. Japanese anime key visual, clean cel shading, vivid saturated colours, expressive linework.",
-	},
-	{
-		"realistic",
-		[]string{realisticSuffix, realisticSuffixRu},
-		"%s. Shot on 35mm film in natural daylight, shallow depth of field, realistic skin texture with visible pores, fine grain.",
-	},
-	{
-		// The anchor on games carries most of the load here. Without it, with
-		// only the lighting description, Z-Image draws an ordinary night street
-		// with signs lit from within rather than neon. In the old fooocus
-		// template the same role was played by the "reminiscent of cyberpunk
-		// genre video games" tail.
-		"cyberpunk",
-		[]string{cyberpunkSuffix, cyberpunkSuffixRu},
-		"%s. In the style of the Cyberpunk 2077 video game, Night City after dark: " +
-			"glowing neon tube signs and holographic billboards in magenta, cyan and electric blue, " +
-			"dense stacked signage crowding the street, volumetric haze, rain-slick asphalt " +
-			"mirroring the glow, strong bloom and anamorphic lens flare, saturated high-contrast night.",
-	},
-	{
-		"meha",
-		[]string{mehaSuffix, mehaSuffixRu},
-		"%s. Hard-surface mecha design, panelled armour plating, exposed hydraulics and cabling, brushed metal worn at the edges.",
-	},
-}
-
-// defaultImageStyleName marks a request that asked for no style at all: the
-// prompt goes to the model as the person wrote it.
-const defaultImageStyleName = "plain"
-
-const defaultImageTemplate = "%s"
-
-// matchImageStyle finds the style the trailing keyword asks for, nil when none.
-func matchImageStyle(msgText string) *imageStyle {
-	text := strings.ToLower(msgText)
-
-	for i := range imageStyles {
-		for _, suffix := range imageStyles[i].suffixes {
-			if strings.HasSuffix(text, suffix) {
-				return &imageStyles[i]
-			}
+	for _, prefix := range imageCommandPrefixes {
+		if len(text) >= len(prefix) && strings.EqualFold(text[:len(prefix)], prefix) {
+			return strings.TrimSpace(text[len(prefix):])
 		}
 	}
-
-	return nil
-}
-
-func getImageTemplate(msgText string) string {
-	if style := matchImageStyle(msgText); style != nil {
-		return style.template
-	}
-
-	return defaultImageTemplate
-}
-
-// getImageStyle names the applied template. Only statistics need this: it is
-// how we learn which styles people reach for and which are dead weight.
-func getImageStyle(msgText string) string {
-	if style := matchImageStyle(msgText); style != nil {
-		return style.name
-	}
-
-	return defaultImageStyleName
-}
-
-func getImagePrompt(msgText string) string {
-	text := strings.ToLower(msgText)
-
-	if strings.HasSuffix(text, animeSuffix) || strings.HasSuffix(text, animeSuffixRu) {
-		text, _ = strings.CutSuffix(text, animeSuffix)
-		text, _ = strings.CutSuffix(text, animeSuffixRu)
-	} else if strings.HasSuffix(text, realisticSuffix) || strings.HasSuffix(text, realisticSuffixRu) {
-		text, _ = strings.CutSuffix(text, realisticSuffix)
-		text, _ = strings.CutSuffix(text, realisticSuffixRu)
-	} else if strings.HasSuffix(text, cyberpunkSuffix) || strings.HasSuffix(text, cyberpunkSuffixRu) {
-		text, _ = strings.CutSuffix(text, cyberpunkSuffix)
-		text, _ = strings.CutSuffix(text, cyberpunkSuffixRu)
-	} else if strings.HasSuffix(text, mehaSuffix) || strings.HasSuffix(text, mehaSuffixRu) {
-		text, _ = strings.CutSuffix(text, mehaSuffix)
-		text, _ = strings.CutSuffix(text, mehaSuffixRu)
-	}
-
-	text, _ = strings.CutPrefix(text, "draw ")
-	text, _ = strings.CutPrefix(text, "нарисуй ")
 
 	return text
 }
@@ -152,17 +45,16 @@ func getImagePrompt(msgText string) string {
 func generateImage(msgText string, caller Caller) ([]byte, error) {
 	prompt := getImagePrompt(msgText)
 	log.Printf("Got prompt %s\n", prompt)
-	promptTemplate := getImageTemplate(msgText)
-	translatedPrompt, err := translatePrompt(prompt)
+
+	finalPrompt, mode, err := buildImagePrompt(prompt)
 	if err != nil {
 		return nil, err
 	}
 
-	enhancedPrompt := applyPromptTemplate(promptTemplate, translatedPrompt)
-	log.Printf("Image prompt: %s\n", enhancedPrompt)
+	log.Printf("Image prompt (%s): %s\n", mode, finalPrompt)
 
-	return requestImage(enhancedPrompt, caller,
-		promptOrigin{Source: msgText, Style: getImageStyle(msgText)})
+	return requestImage(finalPrompt, caller,
+		promptOrigin{Source: msgText, Style: mode})
 }
 
 // requestImage sends an already assembled prompt and waits for the finished
