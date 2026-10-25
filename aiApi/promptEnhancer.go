@@ -26,6 +26,27 @@ import (
 // The expansion is one call to the same llm the translator already uses, so
 // no new service and no new card: it costs about 2.5 seconds and translates
 // on the way, which the bare translation used to do anyway.
+//
+// WHY 40-60 WORDS AND NOT 400. Qwen publish their own rewriter for this very
+// model (Qwen-Image-2.1-PE-T2I) and its system prompt asks for 400-500 words
+// in a strict eight-step layout. We measured both on live requests, one seed
+// each: the long style lost. "кота" turned into a flat catalogue portrait on
+// white, and "Отмена, сервер подох" was read as an instruction to cancel,
+// producing 266 words about an empty frame. Their own README says why — the
+// format holds because that model is FINE-TUNED for it, with thinking
+// enabled; a stock llm handed the same layout writes correct structure and
+// dead pictures. It also costs 10-14 s instead of 3.
+//
+// What we did take from their spec: no quality boosters (with guidance off
+// on this model such words push nothing and only dilute the description —
+// see the image model registry in ai-api-stuff), present tense, and describe
+// rather than instruct. Their rule on quoting text in its own script we had
+// already arrived at on our own.
+//
+// Not taken, and worth its own task: their rewriter also PICKS AN ASPECT
+// RATIO (3:2, 2:3, 1:1, 9:16). Our frame is nailed to 1152x896 in the
+// service registry and the bot does not send a size for pictures at all, so
+// a portrait subject wastes half the canvas.
 const enhanceSystemPrompt = "You rewrite a user's short idea into ONE vivid English prompt for a text-to-image model.\n" +
 	"RULES, in order of importance:\n" +
 	"1. Keep the subject and every named thing exactly as given. Never replace, generalise or add a different main subject. Proper nouns you do NOT recognise — shops, brands, towns, people, invented or slang words — are kept as they are, transliterated into Latin letters if needed. Never swap an unfamiliar name for a familiar one: if you do not know what «Хофф» is, write Hoff, never IKEA. If a word looks invented, keep it invented.\n" +
@@ -33,8 +54,9 @@ const enhanceSystemPrompt = "You rewrite a user's short idea into ONE vivid Engl
 	"3. Keep the intent. A joke stays a joke, a meme stays a meme: make it look good, do not make it solemn or cinematic.\n" +
 	"4. Text in quotes is copied character for character, in its original language, with the SAME quote marks: «» stay «», \"\" stay \"\". Never translate quoted text, never restyle its punctuation.\n" +
 	"5. If the idea is a slogan, a caption, a headline or a sign, the words themselves must APPEAR in the picture: say where they are written — a poster, a banner, a shop sign — and quote them exactly, in their original language.\n" +
-	"6. Add only: camera angle, lens feel, lighting, time of day, mood, materials, and one unexpected detail that makes the frame memorable. Never name a living artist, a studio or a franchise — describe the look in plain words instead.\n" +
+	"6. Add only: camera angle, lens feel, lighting, time of day, mood, materials, and one unexpected detail that makes the frame memorable. Never name a living artist, a studio or a franchise — describe the look in plain words instead. Never pad with quality words: no 'masterpiece', '8k', 'ultra detailed', 'award-winning', 'trending'.\n" +
 	"7. If the idea is ALREADY detailed (names a style, a camera, lighting or runs longer than about 25 words), return it unchanged, translated to English if needed, keeping rule 4.\n" +
+	"Write in the present tense, describing the finished picture as an observer sees it. Never address the reader and never give instructions.\n" +
 	"Answer with the prompt only: 40-60 words, ONE flowing paragraph of full sentences, not a list of comma-separated tags. English, no preamble, no quotes around the whole answer."
 
 // enhanceWordLimit is where a request stops being telegraphic. Taken from the
