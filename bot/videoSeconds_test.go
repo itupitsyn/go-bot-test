@@ -95,7 +95,10 @@ func TestLengthIsClampedToWhatTheCardWillDo(t *testing.T) {
 	cases := map[string]float64{
 		"котика 60 секунд":     videoSecondsMax,
 		"котика 100500 секунд": videoSecondsMax,
-		"котика 11 секунд":     videoSecondsMax,
+		"котика 16 секунд":     videoSecondsMax,
+		// А вот это с 27.10.2026 уже внутри диапазона и доезжает как есть:
+		// до замера пятнадцати секунд одиннадцать зажимались в десять.
+		"котика 11 секунд": 11,
 		"котика 3 секунды":     videoSecondsMin,
 		"котика 1 с":           videoSecondsMin,
 		"котика 5 секунд":      videoSecondsDefault,

@@ -11,10 +11,15 @@ import (
 // videoSecondsMax is OUR ceiling and it has to match VIDEO_MAX_SECONDS on the
 // service. The service clamps the request to its own range anyway, so a higher
 // ceiling here would mean a person asking for fifteen seconds, getting ten and
-// being charged for fifteen. Raising it is two edits, and only after a
-// measurement: a frame gets dearer with length (2.3 s against 1.6 s on a
-// five-second clip), so fifteen seconds is 17-19 minutes of one card and
-// nobody has checked that it even fits.
+// being charged for fifteen.
+//
+// Fifteen seconds since 27.10.2026, and measured rather than assumed: 362
+// frames at 672x896 came out in 821 s against 138 s for five seconds on the
+// same canvas. Three times the length costs six times the card, which is why
+// the points for it are not three times either. It fits with 730 MiB to spare
+// out of 24576, so the service pins a long clip to that canvas: a fifteen
+// second clip from a phone photo gets a slightly smaller frame than a ten
+// second one would.
 //
 // videoSecondsMin is the bottom of what the model was trained on. H3 has seen
 // about no three-second clips, and the service would stretch such a request to
@@ -23,7 +28,7 @@ import (
 const (
 	videoSecondsDefault = 5.0
 	videoSecondsMin     = 5.0
-	videoSecondsMax     = 10.0
+	videoSecondsMax     = 15.0
 )
 
 // cutVideoSeconds reads the asked-for length out of the command text and
