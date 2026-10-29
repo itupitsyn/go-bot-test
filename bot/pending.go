@@ -249,7 +249,7 @@ func RecoverDeliveries(ctx context.Context, b *bot.Bot) {
 
 	log.Printf("Незабранных задач в журнале: %d, подбираю\n", len(owed))
 	for _, row := range owed {
-		go resumeDelivery(ctx, b, row)
+		utils.Go("resumeDelivery", func() { resumeDelivery(ctx, b, row) })
 	}
 }
 

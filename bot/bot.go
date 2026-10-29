@@ -282,14 +282,29 @@ func New(ctx context.Context) *bot.Bot {
 		opts = append(opts, bot.WithServerURL(serverURL))
 	}
 
-	b, err := bot.New(os.Getenv("TELEGRAM_APITOKEN"), opts...)
-	if err != nil {
-		panic(err)
+	// Оба вызова идут через keepTrying, потому что оба лезут в сеть: bot.New
+	// сам зовёт getMe, чтобы узнать имя бота, и именно он падал три часа
+	// 29.10.2026. log.Fatalf вместо panic не косметика — паника печатается
+	// рантаймом прямо в stderr, мимо маски, и за те три часа уложила токен в
+	// журнал открытым 1292 раза.
+	var b *bot.Bot
+	if err := keepTrying(ctx, "bot.New", func() error {
+		var err error
+		b, err = bot.New(os.Getenv("TELEGRAM_APITOKEN"), opts...)
+
+		return err
+	}); err != nil {
+		log.Fatalf("[error] can't reach Telegram to start up: %v", err)
 	}
 
-	self, err := b.GetMe(ctx)
-	if err != nil {
-		panic(err)
+	var self *models.User
+	if err := keepTrying(ctx, "getMe", func() error {
+		var err error
+		self, err = b.GetMe(ctx)
+
+		return err
+	}); err != nil {
+		log.Fatalf("[error] can't ask Telegram who we are: %v", err)
 	}
 	botName = self.Username
 

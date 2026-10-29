@@ -10,16 +10,21 @@ import (
 
 // Ровно та строка, из-за которой всё и делается: так библиотека печатает
 // неудачный вызов Telegram, и так токен попадал в journalctl.
+//
+// Токен здесь и дальше ВЫДУМАННЫЙ. До 29.10.2026 в этих тестах лежал боевой —
+// настоящий id бота и двадцать шесть символов секретной части, — и уехал в
+// гит вместе с ними. Правдоподобия от образца тут не требуется: маске важна
+// только форма `/bot<цифры>:<буквы>`.
 func TestMaskSecretsCutsTheTokenOutOfTheURL(t *testing.T) {
 	line := `error do request for method sendMessage, ` +
-		`Post "https://tg-api.example/bot5169125974:AAFnOPjdZXUoUshy468pqANPEJ/sendMessage": context canceled`
+		`Post "https://tg-api.example/bot1234567890:AAHfake-token-for-tests-only/sendMessage": context canceled`
 
 	got := MaskSecrets(line)
 
-	if strings.Contains(got, "AAFnOPjdZXUoUshy468pqANPEJ") {
+	if strings.Contains(got, "AAHfake-token-for-tests-only") {
 		t.Error("токен остался в строке")
 	}
-	if strings.Contains(got, "5169125974") {
+	if strings.Contains(got, "1234567890") {
 		t.Error("числовая часть токена осталась в строке")
 	}
 	// Имя метода и причина — единственное, зачем эту строку читают. Если маска
@@ -64,13 +69,13 @@ func TestMaskSecretsIgnoresEmptyAndShortValues(t *testing.T) {
 // Паника приезжает в log одним куском со стеком, и маска обязана работать и
 // посреди многострочного текста.
 func TestMaskSecretsWorksAcrossLines(t *testing.T) {
-	t.Setenv("TELEGRAM_APITOKEN", "5169125974:AAFnOPjdZXUoUshy468pqANPEJ")
+	t.Setenv("TELEGRAM_APITOKEN", "1234567890:AAHfake-token-for-tests-only")
 
 	got := MaskSecrets("panic while handling an update\n" +
 		"goroutine 1 [running]:\n" +
-		"telebot/bot.send(5169125974:AAFnOPjdZXUoUshy468pqANPEJ)\n")
+		"telebot/bot.send(1234567890:AAHfake-token-for-tests-only)\n")
 
-	if strings.Contains(got, "AAFnOPjdZXUoUshy468pqANPEJ") {
+	if strings.Contains(got, "AAHfake-token-for-tests-only") {
 		t.Error("токен остался в стеке")
 	}
 	if !strings.Contains(got, "goroutine 1 [running]:") {
@@ -88,10 +93,10 @@ func TestHideSecretsInLogsMasksWhatWeActuallyPrint(t *testing.T) {
 	defer log.SetOutput(previous)
 
 	HideSecretsInLogs()
-	log.Println(errors.New(`Post "https://tg-api.example/bot5169125974:AAFnOPjdZXUo/sendVideo": EOF`))
+	log.Println(errors.New(`Post "https://tg-api.example/bot1234567890:AAHfake-token/sendVideo": EOF`))
 
 	printed := out.String()
-	if strings.Contains(printed, "AAFnOPjdZXUo") {
+	if strings.Contains(printed, "AAHfake-token") {
 		t.Errorf("токен доехал до вывода: %s", printed)
 	}
 	if !strings.Contains(printed, "sendVideo") {

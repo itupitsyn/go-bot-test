@@ -19,6 +19,11 @@ import (
 )
 
 func main() {
+	// Самым первым: паника в main печатается рантаймом в stderr мимо маски, а
+	// токен лежит в ошибках Telegram целиком. Регистрируем до loadEnv, чтобы
+	// прикрыть и чтение окружения — там токен и живёт.
+	defer utils.ExitOnPanic("main")
+
 	loadEnv()
 
 	// Сразу после окружения и до первого обращения к Telegram: библиотека
@@ -36,14 +41,16 @@ func main() {
 	defer cancel()
 
 	b := bot.New(ctx)
-	go pruneAiUsage(ctx)
-	go raffleLogic.Listen(b)
-	go bot.StartThumbnailServer(ctx, b)
-	go bot.WatchShutdown(ctx)
+	// Через utils.Go, а не голым `go`: своя горутина — своя паника, и без
+	// обёртки она уйдёт в stderr с токеном внутри.
+	utils.Go("pruneAiUsage", func() { pruneAiUsage(ctx) })
+	utils.Go("raffleLogic.Listen", func() { raffleLogic.Listen(b) })
+	utils.Go("thumbnailServer", func() { bot.StartThumbnailServer(ctx, b) })
+	utils.Go("watchShutdown", func() { bot.WatchShutdown(ctx) })
 
 	// Сразу, до первого апдейта: предыдущий процесс мог умереть, не отдав
 	// досчитанное. Сервис его досчитал и держит, подобрать можно только нам.
-	go bot.RecoverDeliveries(ctx, b)
+	utils.Go("recoverDeliveries", func() { bot.RecoverDeliveries(ctx, b) })
 
 	bot.Start(ctx, b)
 

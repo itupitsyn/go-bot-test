@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"telebot/model"
+	"telebot/utils"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -98,7 +99,7 @@ func StartThumbnailServer(ctx context.Context, b *bot.Bot) {
 		WriteTimeout:      30 * time.Second,
 	}
 
-	go func() {
+	utils.Go("thumbnailServer.Shutdown", func() {
 		<-ctx.Done()
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -107,7 +108,7 @@ func StartThumbnailServer(ctx context.Context, b *bot.Bot) {
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			log.Println("[error] error stopping the thumbnail server", err)
 		}
-	}()
+	})
 
 	log.Println("Thumbnail server is listening on", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

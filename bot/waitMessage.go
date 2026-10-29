@@ -109,7 +109,7 @@ func newChatWaitMessage(ctx context.Context, b *bot.Bot, chatId int64, replyToMe
 		return err
 	})
 
-	go w.open()
+	utils.Go("waitMessage.open", w.open)
 
 	return w
 }
@@ -127,7 +127,7 @@ func newInlineWaitMessage(ctx context.Context, b *bot.Bot, inlineMessageId strin
 		return editInlineStatus(ctx, b, inlineMessageId, text)
 	})
 
-	go w.open()
+	utils.Go("waitMessage.open", w.open)
 
 	return w
 }

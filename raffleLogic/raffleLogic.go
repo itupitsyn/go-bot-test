@@ -60,7 +60,9 @@ func runRaffles(b *bot.Bot) ([]model.Raffle, error) {
 			name = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", winner.ID, winner.AlternativeName)
 		}
 
-		go sendResultWithPrep(b, currentRaffle.ChatID, raffleDate, name)
+		utils.Go("sendResultWithPrep", func() {
+			sendResultWithPrep(b, currentRaffle.ChatID, raffleDate, name)
+		})
 	}
 
 	return raffles, err
@@ -73,7 +75,10 @@ func runRaffle(currentRaffle *model.Raffle) *model.User {
 	}
 	winnerIdx, err := rand.Int(rand.Reader, big.NewInt(int64(participantsCount)))
 	if err != nil {
-		panic(err)
+		// log.Fatalf, а не panic: процесс завершается так же, но строка идёт
+		// через маску (см. utils/panics.go). Паника печатается рантаймом в
+		// stderr мимо неё.
+		log.Fatalf("[error] can't draw a winner out of %d: %v", participantsCount, err)
 	}
 	winner := currentRaffle.Participants[winnerIdx.Int64()]
 	currentRaffle.WinnerID = &winner.ID

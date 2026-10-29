@@ -80,7 +80,7 @@ func processInlineImageUpload(ctx context.Context, b *bot.Bot, update *models.Up
 		return
 	}
 
-	go cleanupInlineImages()
+	utils.Go("cleanupInlineImages", cleanupInlineImages)
 
 	msgText := fmt.Sprintf("Запомнил! Набери в любом чате @%s и выбери «Анимировать мою картинку».\n\n%s",
 		botName, inlineImageBufferHint())
