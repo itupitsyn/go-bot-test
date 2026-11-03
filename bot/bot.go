@@ -238,6 +238,21 @@ func getHandler() bot.HandlerFunc {
 			} else if msgTextLower == "/censorship" || strings.HasPrefix(msgTextLower, "/censorship@"+botName) {
 				log.Println("Censorship switch requested by", userName)
 				processCensorship(ctx, b, update, chat)
+			} else if isBirthdayCommand(msgTextLower, "/birthday") {
+				log.Println("Setting a birthday requested by", userName)
+				processSetBirthday(ctx, b, update)
+			} else if isBirthdayCommand(msgTextLower, "/birthday_remind") {
+				log.Println("Birthday reminder requested by", userName)
+				processAddBirthdayReminder(ctx, b, update)
+			} else if isBirthdayCommand(msgTextLower, "/birthday_forget") {
+				log.Println("Removing a birthday reminder requested by", userName)
+				processRemoveBirthdayReminder(ctx, b, update)
+			} else if isBirthdayCommand(msgTextLower, "/birthdays") {
+				log.Println("Birthdays requested by", userName)
+				processBirthdays(ctx, b, update, chat)
+			} else if isBirthdayCommand(msgTextLower, "/birthdays_switch") {
+				log.Println("Birthdays switch requested by", userName)
+				processBirthdaysSwitch(ctx, b, update, chat)
 			}
 		}
 	}

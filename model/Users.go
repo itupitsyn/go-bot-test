@@ -12,6 +12,11 @@ type User struct {
 	Raffle          []Raffle       `gorm:"foreignKey:WinnerID;"`
 	Admins          []Admin        `gorm:"foreignKey:UserID;"`
 	ChatUserRoles   []ChatUserRole `gorm:"foreignKey:UserID;"`
+
+	// Дата как ММ-ДД, без года. Модель её только читает: saveUser на каждое
+	// сообщение сохраняет человека целиком из данных Telegram, где даты нет, и
+	// обычное поле стиралось бы тут же. Пишет только SetUserBirthday.
+	Birthday *string `gorm:"size:5;<-:false"`
 }
 
 func (user *User) Save() (*User, error) {

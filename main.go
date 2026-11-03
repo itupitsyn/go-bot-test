@@ -47,6 +47,7 @@ func main() {
 	utils.Go("raffleLogic.Listen", func() { raffleLogic.Listen(b) })
 	utils.Go("thumbnailServer", func() { bot.StartThumbnailServer(ctx, b) })
 	utils.Go("watchShutdown", func() { bot.WatchShutdown(ctx) })
+	utils.Go("watchBirthdays", func() { bot.WatchBirthdays(ctx, b) })
 
 	// Сразу, до первого апдейта: предыдущий процесс мог умереть, не отдав
 	// досчитанное. Сервис его досчитал и держит, подобрать можно только нам.
@@ -144,6 +145,9 @@ func loadDatabase() {
 	}
 	if err := db.AutoMigrate(&model.PendingDelivery{}); err != nil {
 		log.Fatal("Error migrating PendingDelivery", err)
+	}
+	if err := db.AutoMigrate(&model.BirthdayReminder{}); err != nil {
+		log.Fatal("Error migrating BirthdayReminder", err)
 	}
 	// Снимаем уникальность с users.name. Она осталась от прежней схемы, а
 	// AutoMigrate ограничения не убирает — в модели поле давно объявлено

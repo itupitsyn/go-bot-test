@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"telebot/model"
@@ -44,9 +45,11 @@ func GetAnyName(user *models.User) string {
 }
 
 // SendPhrazes posts each phraze to the chat. If a non-zero replyTo message ID
-// is passed, every phraze is sent as a reply to that message.
-func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []model.Phraze, replyTo ...int) {
+// is passed, every phraze is sent as a reply to that message. Failures are logged
+// here; the returned error is for a caller that wants to try again later.
+func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []model.Phraze, replyTo ...int) error {
 	chatId := chat.ID
+	var failures []error
 
 	var replyParams *models.ReplyParameters
 	if len(replyTo) > 0 && replyTo[0] != 0 {
@@ -63,6 +66,7 @@ func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []mo
 				ReplyParameters: replyParams,
 			})
 			ProcessSendMessageError(err, chatId)
+			failures = append(failures, err)
 		} else {
 			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID:          chat.ID,
@@ -70,12 +74,15 @@ func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []mo
 				ReplyParameters: replyParams,
 			})
 			ProcessSendMessageError(err, chatId)
+			failures = append(failures, err)
 		}
 
 		duration := rand.IntN(5) + 1
 
 		time.Sleep(time.Duration(duration) * time.Second)
 	}
+
+	return errors.Join(failures...)
 }
 
 func TrimPrefixIgnoreCase(s, prefix string) string {

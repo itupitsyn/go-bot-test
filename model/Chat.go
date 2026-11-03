@@ -8,6 +8,9 @@ type Chat struct {
 	Prize        []Prize        `gorm:"foreginKey:ChatID;"`
 	Raffle       []Raffle       `gorm:"foreginKey:ChatID;"`
 	ChatUserRole []ChatUserRole `gorm:"foreginKey:ChatID;"`
+
+	// Включены ли здесь напоминания о днях рождения. Кого касается: BirthdayReminder.
+	BirthdaysEnabled bool `gorm:"default:false" json:"birthdays_enabled"`
 }
 
 func (chat *Chat) Save() (*Chat, error) {
@@ -24,6 +27,15 @@ func (chat *Chat) SetUncensored(isUncensored bool) error {
 	err := db.Model(chat).Update("is_uncensored", isUncensored).Error
 	if err == nil {
 		chat.IsUncensored = isUncensored
+	}
+	return err
+}
+
+// SetBirthdaysEnabled, как и SetUncensored, меняет только свой флаг.
+func (chat *Chat) SetBirthdaysEnabled(enabled bool) error {
+	err := db.Model(chat).Update("birthdays_enabled", enabled).Error
+	if err == nil {
+		chat.BirthdaysEnabled = enabled
 	}
 	return err
 }
