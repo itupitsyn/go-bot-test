@@ -111,13 +111,18 @@ func birthdayNotices(rows []model.BirthdayRow, today time.Time) []birthdayNotice
 	return notices
 }
 
-// birthdayPersonName: ник зовёт человека в чат, а без ника остаётся только имя.
+// birthdayPersonName — подпись в списке /birthdays, простым текстом.
 func birthdayPersonName(name string, alternativeName string) string {
 	if name != "" {
 		return "@" + name
 	}
 
 	return alternativeName
+}
+
+// birthdayMention — как зовём именинника в поздравлении, уже в HTML.
+func birthdayMention(userID int64, name string, alternativeName string) string {
+	return utils.MentionHTML(userID, name, alternativeName, "Именинник")
 }
 
 // formatBirthdayPhrase подставляет имя, как formatSizePhrase подставляет размер: нет
@@ -130,20 +135,18 @@ func formatBirthdayPhrase(template string, name string) string {
 	return fmt.Sprintf("%s %s", template, name)
 }
 
-// birthdayPhrazes — сценарий из раздела фраз, с именем внутри. Фраза со спойлером
-// уходит как HTML, поэтому там имя экранируется: оно написано самим человеком.
-func birthdayPhrazes(stored []model.Phraze, fallback string, name string) []model.Phraze {
+// birthdayPhrazes — сценарий из раздела фраз, с тегом внутри. Ссылка работает только в
+// HTML, поэтому так уходит весь сценарий, а текст фразы экранируется: в нём может
+// встретиться любой символ. mention уже готов, см. birthdayMention.
+func birthdayPhrazes(stored []model.Phraze, fallback string, mention string) []model.Phraze {
 	if len(stored) == 0 {
 		stored = []model.Phraze{{Value: fallback}}
 	}
 
 	phrazes := make([]model.Phraze, 0, len(stored))
 	for _, phraze := range stored {
-		personName := name
-		if phraze.IsWithSpoiler {
-			personName = html.EscapeString(name)
-		}
-		phraze.Value = formatBirthdayPhrase(phraze.Value, personName)
+		phraze.Value = formatBirthdayPhrase(html.EscapeString(phraze.Value), mention)
+		phraze.IsHTML = true
 		phrazes = append(phrazes, phraze)
 	}
 
@@ -169,9 +172,9 @@ func sendBirthdayNotice(ctx context.Context, b *bot.Bot, notice birthdayNotice, 
 		key, fallback = birthdayTomorrowKey, birthdayTomorrowDefault
 	}
 	stored := raffleLogic.GetRandomPhrazeByKey(key, chat.IsUncensored)
-	name := birthdayPersonName(row.Name, row.AlternativeName)
+	mention := birthdayMention(row.UserID, row.Name, row.AlternativeName)
 
-	if err := utils.SendPhrazes(ctx, b, chat, birthdayPhrazes(stored, fallback, name)); err != nil && !birthdayNoRetry(err) {
+	if err := utils.SendPhrazes(ctx, b, chat, birthdayPhrazes(stored, fallback, mention)); err != nil && !birthdayNoRetry(err) {
 		return
 	}
 

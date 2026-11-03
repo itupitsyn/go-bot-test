@@ -22,6 +22,9 @@ type Phraze struct {
 	IsWithSpoiler bool   `gorm:"default:false" json:"is_with_spoiler"`
 	Group         *int
 	Order         *int
+
+	// IsHTML не хранится: его ставит код, уже подготовивший Value как HTML.
+	IsHTML bool `gorm:"-" json:"-"`
 }
 
 // GivePhrazesAnID переводит таблицу с первичного ключа (key, value) на

@@ -1,9 +1,13 @@
 package bot
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"telebot/model"
+	"telebot/utils"
 	"testing"
 	"time"
 
@@ -44,21 +48,60 @@ func TestFormatBirthdayPhrase(t *testing.T) {
 }
 
 func TestBirthdayPhrazes(t *testing.T) {
-	got := birthdayPhrazes(nil, birthdayTodayDefault, "Вася")
-	if len(got) != 1 || got[0].Value != "Вася, с днём рождения!" {
+	got := birthdayPhrazes(nil, birthdayTodayDefault, "@vasya")
+	if len(got) != 1 || got[0].Value != "@vasya, с днём рождения!" || !got[0].IsHTML {
 		t.Errorf("an empty phrase section must fall back to the default, got %+v", got)
 	}
 
-	stored := []model.Phraze{{Value: "{name}!"}, {Value: "{name}?", IsWithSpoiler: true}}
-	got = birthdayPhrazes(stored, birthdayTodayDefault, "<Вася>")
-	if got[0].Value != "<Вася>!" {
-		t.Errorf("plain text must stay as written, got %q", got[0].Value)
+	link := birthdayMention(10, "", "Вася")
+	stored := []model.Phraze{{Value: "1 < 2, {name} & всё"}, {Value: "{name}?", IsWithSpoiler: true}}
+	got = birthdayPhrazes(stored, birthdayTodayDefault, link)
+	if want := "1 &lt; 2, " + link + " &amp; всё"; got[0].Value != want || !got[0].IsHTML {
+		t.Errorf("the phrase must be escaped and the link must survive, got %q", got[0].Value)
 	}
-	if got[1].Value != "&lt;Вася&gt;?" {
-		t.Errorf("a spoiler goes out as HTML and must be escaped, got %q", got[1].Value)
+	if got[1].Value != link+"?" || !got[1].IsWithSpoiler {
+		t.Errorf("got %+v", got[1])
 	}
-	if stored[0].Value != "{name}!" {
+	if stored[0].Value != "1 < 2, {name} & всё" || stored[0].IsHTML {
 		t.Error("the stored phrases must stay untouched")
+	}
+}
+
+func TestBirthdayMention(t *testing.T) {
+	cases := []struct{ name, alternative, want string }{
+		{"vasya", "Вася", "@vasya"},
+		{"", "Вася", `<a href="tg://user?id=10">Вася</a>`},
+		{"", "<b>Вася&", `<a href="tg://user?id=10">&lt;b&gt;Вася&amp;</a>`},
+		{"", "", `<a href="tg://user?id=10">Именинник</a>`},
+	}
+	for _, item := range cases {
+		if got := birthdayMention(10, item.name, item.alternative); got != item.want {
+			t.Errorf("birthdayMention(%q, %q) = %q, want %q", item.name, item.alternative, got, item.want)
+		}
+	}
+}
+
+// Что реально уходит в Telegram: ссылка работает, только если parse_mode задан.
+func TestBirthdayMentionReachesTelegramAsHTML(t *testing.T) {
+	var text, parseMode string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		text, parseMode = r.FormValue("text"), r.FormValue("parse_mode")
+		fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+	}))
+	defer server.Close()
+
+	b, err := bot.New("1:token", bot.WithServerURL(server.URL), bot.WithSkipGetMe())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	phrazes := birthdayPhrazes(nil, birthdayTodayDefault, birthdayMention(10, "", "Вася"))
+	if err := utils.SendPhrazes(context.Background(), b, &model.Chat{ID: -100}, phrazes); err != nil {
+		t.Fatal(err)
+	}
+
+	if parseMode != "HTML" || text != `<a href="tg://user?id=10">Вася</a>, с днём рождения!` {
+		t.Errorf("parse_mode = %q, text = %q", parseMode, text)
 	}
 }
 

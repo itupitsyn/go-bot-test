@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 
 	"math/rand"
 	"telebot/model"
+	"telebot/utils"
 
 	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -42,14 +43,9 @@ func SendResult(ctx context.Context, b *bot.Bot, chat *model.Chat, date datatype
 	}
 	prizeName := GetPrizeName(prize, chat)
 
-	msgText := fmt.Sprintf("%s выигрывает %s!!", winnerName, prizeName)
-	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:    chatId,
-		Text:      msgText,
-		ParseMode: models.ParseModeHTML,
-	})
+	msgText := fmt.Sprintf("%s выигрывает %s!!", winnerName, html.EscapeString(prizeName))
 
-	return err
+	return utils.SendPhrazes(ctx, b, chat, []model.Phraze{{Value: msgText, IsHTML: true}})
 }
 
 type IntWithNull struct {

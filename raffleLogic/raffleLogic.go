@@ -3,7 +3,6 @@ package raffleLogic
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"log"
 	"math/big"
 	"os"
@@ -53,12 +52,7 @@ func runRaffles(b *bot.Bot) ([]model.Raffle, error) {
 		if winner == nil {
 			continue
 		}
-		var name string
-		if winner.Name != "" {
-			name = "@" + winner.Name
-		} else {
-			name = fmt.Sprintf("<a href=\"tg://user?id=%d\">%s</a>", winner.ID, winner.AlternativeName)
-		}
+		name := utils.MentionHTML(winner.ID, winner.Name, winner.AlternativeName, "Победитель")
 
 		utils.Go("sendResultWithPrep", func() {
 			sendResultWithPrep(b, currentRaffle.ChatID, raffleDate, name)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"math/rand/v2"
 	"telebot/model"
 	"time"
@@ -44,6 +45,21 @@ func GetAnyName(user *models.User) string {
 	return GetAlternativeName(user)
 }
 
+// MentionHTML — как позвать человека в сообщении с HTML: по нику, а без ника ссылкой
+// на id. Имя написал сам человек, поэтому оно экранируется: один символ «<» иначе
+// заставит Telegram отклонить всё сообщение. Пустое имя заменяет fallback, потому
+// что ссылку без текста Telegram просто выбрасывает.
+func MentionHTML(userID int64, name string, alternativeName string, fallback string) string {
+	if name != "" {
+		return "@" + html.EscapeString(name)
+	}
+	if alternativeName == "" {
+		alternativeName = fallback
+	}
+
+	return fmt.Sprintf(`<a href="tg://user?id=%d">%s</a>`, userID, html.EscapeString(alternativeName))
+}
+
 // SendPhrazes posts each phraze to the chat. If a non-zero replyTo message ID
 // is passed, every phraze is sent as a reply to that message. Failures are logged
 // here; the returned error is for a caller that wants to try again later.
@@ -71,6 +87,7 @@ func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []mo
 			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID:          chat.ID,
 				Text:            phraze.Value,
+				ParseMode:       phrazeParseMode(phraze),
 				ReplyParameters: replyParams,
 			})
 			ProcessSendMessageError(err, chatId)
@@ -83,6 +100,14 @@ func SendPhrazes(ctx context.Context, b *bot.Bot, chat *model.Chat, phrazes []mo
 	}
 
 	return errors.Join(failures...)
+}
+
+func phrazeParseMode(phraze model.Phraze) models.ParseMode {
+	if phraze.IsHTML {
+		return models.ParseModeHTML
+	}
+
+	return ""
 }
 
 func TrimPrefixIgnoreCase(s, prefix string) string {
