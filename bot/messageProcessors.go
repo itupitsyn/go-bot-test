@@ -504,11 +504,70 @@ func transcribeFile(ctx context.Context, b *bot.Bot, fileID string, caller aiApi
 	return text, ""
 }
 
+func isSummaryCommand(text string) bool {
+	return isBareCommand(text, "что тут", "сократи", "summarize", "tldr")
+}
+
+// imageCaptionToExplain returns the text sent along with an image, or an empty
+// string when there is none. A caption that is itself the command is not text
+// to explain: that is someone asking the bot about the picture.
+func imageCaptionToExplain(message *models.Message) string {
+	caption := strings.TrimSpace(message.Caption)
+	if isSummaryCommand(strings.ToLower(caption)) {
+		return ""
+	}
+
+	return caption
+}
+
+// joinExplanations puts the two explanations into one message. The labels are
+// needed only when there are two parts: a single one speaks for itself.
+func joinExplanations(textPart, imagePart, languageCode string) string {
+	textPart = strings.TrimSpace(textPart)
+	imagePart = strings.TrimSpace(imagePart)
+	if textPart == "" {
+		return imagePart
+	}
+	if imagePart == "" {
+		return textPart
+	}
+
+	textLabel, imageLabel := aiApi.ExplanationLabels(languageCode)
+
+	return fmt.Sprintf("%s: %s\n\n%s: %s", textLabel, textPart, imageLabel, imagePart)
+}
+
+// describeImageFile downloads an image and describes it. The second value is the
+// text to show if that failed, already logged here.
+func describeImageFile(ctx context.Context, b *bot.Bot, imageID, languageCode string) (string, string) {
+	image, _, err := downloadTelegramFile(ctx, b, imageID)
+	if err != nil {
+		log.Println("[error] error getting an image to describe")
+		log.Println(err)
+		if errors.Is(err, ErrFileTooBig) {
+			return "", fileTooBigText
+		}
+
+		return "", serverDeadText
+	}
+
+	description, err := aiApi.GetImageDescription(image, languageCode)
+	if err != nil {
+		log.Println("[error] error describing an image")
+		log.Println(err)
+
+		return "", serverDeadText
+	}
+
+	return description, ""
+}
+
 // processSummary retells the message the command replies to. Unlike drawing or
 // transcribing this only costs an llm call, so it goes without the "Жди теперь"
 // song and dance, just one short "занят" while the llm thinks. Audio and video
 // get transcribed first, and an image is described by the vision model, still
-// under the same "занят": for the one who asked it is all one retelling.
+// under the same "занят": for the one who asked it is all one retelling. An image
+// with text next to it gets both explained, in one message.
 func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
 
@@ -543,14 +602,16 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 	}
 
 	// There is nothing to retell for stickers and the like: getMessageText is
-	// empty for them. A media caption is not retold: the point is what was said
-	// or shown, and the caption is often the command itself.
+	// empty for them. The caption of audio or video is not retold: the point is
+	// what was said. The caption of an image is explained next to the image.
 	text := ""
 	if fileID == "" && imageID == "" {
 		text = strings.TrimSpace(getMessageText(source))
 		if text == "" {
 			return
 		}
+	} else if fileID == "" {
+		text = imageCaptionToExplain(source)
 	}
 
 	// Maintenance is checked only now: the bot stays silent on a bare "что тут"
@@ -606,23 +667,25 @@ func processSummary(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 	var summary string
 	if imageID != "" {
-		image, _, err := downloadTelegramFile(ctx, b, imageID)
-		if err != nil {
-			log.Println("[error] error getting an image to describe")
-			log.Println(err)
-			if errors.Is(err, ErrFileTooBig) {
-				fail(fileTooBigText)
-			} else {
-				fail(serverDeadText)
+		description, failText := describeImageFile(ctx, b, imageID, languageCode)
+
+		// One part failing is no reason to lose the other. Only when nothing is
+		// left does the asker see a failure.
+		textPart := ""
+		if text != "" {
+			textPart, err = aiApi.GetSummary(text, languageCode)
+			if err != nil {
+				log.Println("[error] error summarizing the text of an image")
+				log.Println(err)
+				if failText == "" {
+					failText = serverDeadText
+				}
 			}
-			return
 		}
 
-		summary, err = aiApi.GetImageDescription(image, languageCode)
-		if err != nil {
-			log.Println("[error] error describing an image")
-			log.Println(err)
-			fail(serverDeadText)
+		summary = joinExplanations(textPart, description, languageCode)
+		if summary == "" && failText != "" {
+			fail(failText)
 			return
 		}
 	} else {

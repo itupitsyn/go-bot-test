@@ -32,6 +32,34 @@ func TestSummarySystemPromptNamesTheLanguage(t *testing.T) {
 	}
 }
 
+func TestExplanationLabelsCoverEveryLanguage(t *testing.T) {
+	for code := range languageNames {
+		text, image := ExplanationLabels(code)
+		if labels, ok := explanationLabels[code]; !ok || labels[0] == "" || labels[1] == "" {
+			t.Errorf("no labels for %q, got %q and %q", code, text, image)
+		}
+	}
+	if len(explanationLabels) != len(languageNames) {
+		t.Errorf("%d labels for %d languages", len(explanationLabels), len(languageNames))
+	}
+}
+
+func TestExplanationLabelsFollowTheCode(t *testing.T) {
+	cases := map[string][2]string{
+		"en":    {"Text", "Image"},
+		"pt-BR": {"Texto", "Imagem"},
+		" DE ":  {"Text", "Bild"},
+		"":      {"Текст", "Картинка"},
+		"xx":    {"Текст", "Картинка"},
+	}
+	for code, want := range cases {
+		text, image := ExplanationLabels(code)
+		if text != want[0] || image != want[1] {
+			t.Errorf("ExplanationLabels(%q) = %q, %q, want %v", code, text, image, want)
+		}
+	}
+}
+
 func TestSummarySystemPromptFallsBack(t *testing.T) {
 	// Telegram does not always send language_code, and the code may be unknown:
 	// then the language is taken from the text itself.

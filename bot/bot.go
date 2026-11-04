@@ -161,7 +161,7 @@ func getHandler() bot.HandlerFunc {
 					wait := sendWaitMessage(chatId, update.Message.ID)
 					processTranscription(ctx, b, update, wait)
 				}
-			} else if isBareCommand(msgTextLower, "что тут") || isBareCommand(msgTextLower, "сократи", "summarize", "tldr") {
+			} else if isSummaryCommand(msgTextLower) {
 				log.Println("Summary requested by", userName)
 				processSummary(ctx, b, update)
 			} else if strings.HasPrefix(msgTextLower, "/stickers_delete") || strings.HasPrefix(msgTextLower, "/stickers_delete@"+botName) {

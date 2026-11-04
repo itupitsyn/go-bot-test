@@ -34,10 +34,43 @@ var languageNames = map[string]string{
 // unknown. Telegram also sends regional tags like "pt-BR", and only the base
 // part matters to us.
 func languageName(code string) string {
+	return languageNames[baseLanguage(code)]
+}
+
+func baseLanguage(code string) string {
 	code = strings.ToLower(strings.TrimSpace(code))
 	code, _, _ = strings.Cut(code, "-")
 
-	return languageNames[code]
+	return code
+}
+
+// explanationLabels names the two parts of an explanation of an image with text,
+// for every language in languageNames: the labels are ours, not the model's, so
+// they have to follow the asker's language here.
+var explanationLabels = map[string][2]string{
+	"ru": {"Текст", "Картинка"}, "uk": {"Текст", "Зображення"}, "be": {"Тэкст", "Малюнак"},
+	"en": {"Text", "Image"}, "de": {"Text", "Bild"}, "fr": {"Texte", "Image"},
+	"es": {"Texto", "Imagen"}, "it": {"Testo", "Immagine"}, "pt": {"Texto", "Imagem"},
+	"pl": {"Tekst", "Obraz"}, "cs": {"Text", "Obrázek"}, "sr": {"Текст", "Слика"},
+	"bg": {"Текст", "Изображение"}, "ro": {"Text", "Imagine"}, "el": {"Κείμενο", "Εικόνα"},
+	"nl": {"Tekst", "Afbeelding"}, "sv": {"Text", "Bild"}, "fi": {"Teksti", "Kuva"},
+	"tr": {"Metin", "Görsel"}, "ar": {"النص", "الصورة"}, "he": {"טקסט", "תמונה"},
+	"hy": {"Տեքստ", "Նկար"}, "ka": {"ტექსტი", "სურათი"}, "az": {"Mətn", "Şəkil"},
+	"kk": {"Мәтін", "Сурет"}, "uz": {"Matn", "Rasm"}, "ky": {"Текст", "Сүрөт"},
+	"tg": {"Матн", "Тасвир"}, "hi": {"पाठ", "चित्र"}, "zh": {"文字", "图片"},
+	"ja": {"テキスト", "画像"}, "ko": {"텍스트", "이미지"}, "vi": {"Văn bản", "Hình ảnh"},
+	"th": {"ข้อความ", "รูปภาพ"}, "id": {"Teks", "Gambar"},
+}
+
+// ExplanationLabels returns the labels for the text and the image parts. With an
+// empty or unknown languageCode they are Russian, as an image description is.
+func ExplanationLabels(languageCode string) (string, string) {
+	labels, ok := explanationLabels[baseLanguage(languageCode)]
+	if !ok {
+		labels = explanationLabels["ru"]
+	}
+
+	return labels[0], labels[1]
 }
 
 // summarySystemPrompt builds the system prompt for a retelling.
