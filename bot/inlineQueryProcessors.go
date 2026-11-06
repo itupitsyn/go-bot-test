@@ -89,7 +89,13 @@ func processInlineQuery(ctx context.Context, b *bot.Bot, update *models.Update) 
 	videoLine := []models.InlineKeyboardButton{videoBtn}
 	videoKbd := [][]models.InlineKeyboardButton{videoLine}
 
-	sizeText := buildSizeText(userId)
+	// Whatever is typed becomes the object of the size phrase too, not only
+	// the prompt: "@bot огурец" offers "Огурец у меня 17 см".
+	sizeText := buildSizeText(userId, update.InlineQuery.Query)
+	sizeDescription := "Каков твой дружок"
+	if object := sizeObject(update.InlineQuery.Query); object != "" {
+		sizeDescription = "Каков твой дружок: " + object
+	}
 	depthText := buildDepthText(userId)
 
 	results := []models.InlineQueryResult{
@@ -110,7 +116,7 @@ func processInlineQuery(ctx context.Context, b *bot.Bot, update *models.Update) 
 		&models.InlineQueryResultArticle{
 			ID:                  "size",
 			Title:               "Размер",
-			Description:         "Каков твой дружок",
+			Description:         sizeDescription,
 			InputMessageContent: models.InputTextMessageContent{MessageText: sizeText},
 		},
 		&models.InlineQueryResultArticle{
