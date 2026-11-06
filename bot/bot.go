@@ -8,6 +8,7 @@ import (
 	"strings"
 	"telebot/raffleLogic"
 	"telebot/utils"
+	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -95,6 +96,7 @@ func getHandler() bot.HandlerFunc {
 		} else if update.Message != nil {
 			chatId := update.Message.Chat.ID
 			saveUser(update.Message.From)
+			albumCaptions.note(update.Message, time.Now())
 			userName := utils.GetAnyName(update.Message.From)
 
 			// Оплата приезжает обычным сообщением, только вместо текста в нём

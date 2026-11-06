@@ -31,6 +31,9 @@ func TestFactCheckProbe(t *testing.T) {
 		{"Anthropic купила компанию Mistral AI в октябре 2026 года.", "not_found or refuted"},
 		{"у меня лапки", "not_checkable"},
 		{"кто съел мой йогурт?", "not_checkable"},
+		// Shaped like the bot builds a claim out of a caption and pictures.
+		{"глянь, что пишут\n\nТекст на картинке:\nElon Musk @elonmusk · 3h\nTesla will open a factory on the Moon in 2027.", "not_found or refuted"},
+		{"Текст на картинке 1:\nЧемпионат мира по футболу 2018 года прошёл в России\n\nТекст на картинке 2:\nВ финале сборная Франции обыграла Хорватию 4:2", "confirmed"},
 	}
 
 	var recent []string
@@ -38,10 +41,10 @@ func TestFactCheckProbe(t *testing.T) {
 		started := time.Now()
 		result, err := CheckFact(c.claim)
 		if err != nil {
-			t.Logf("%-55.55s ERROR %v", c.claim, err)
+			t.Logf("%-55.55q ERROR %v", c.claim, err)
 			continue
 		}
-		t.Logf("%-55.55s %-13s want %-20s %4.1fs evidence %d", c.claim, result.Verdict, c.expected, time.Since(started).Seconds(), len(result.Evidence))
+		t.Logf("%-55.55q %-13s want %-20s %4.1fs evidence %d", c.claim, result.Verdict, c.expected, time.Since(started).Seconds(), len(result.Evidence))
 		if result.Primary != nil {
 			t.Logf("    primary: %s", result.Primary.URL)
 		}

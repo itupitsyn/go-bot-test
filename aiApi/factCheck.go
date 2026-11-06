@@ -88,7 +88,7 @@ type FactCheck struct {
 
 const (
 	// maxClaimRunes keeps a long message from swallowing the whole prompt.
-	maxClaimRunes = 1500
+	maxClaimRunes = 3000 // room for the text of two screenshots
 	// minQuoteLetters rejects "quotes" too short to mean anything: "да", "2026".
 	minQuoteLetters = 12
 )

@@ -61,6 +61,12 @@ func GenerateFactJoke(message string, recent []string) (string, error) {
 	return generateFactJoke(message, recent)
 }
 
+// ReadPictureText gives the text written on a picture, word for word, for a
+// fact check. An empty string means the picture has no text.
+func ReadPictureText(image []byte) (string, error) {
+	return readPictureText(image)
+}
+
 // GetImageDescription describes what is in an image, in the language of the
 // languageCode IETF tag from the Telegram profile (Russian when it is empty or
 // unknown).

@@ -22,6 +22,10 @@ const (
 	// factNothingText answers a message with nothing to check when no joke came
 	// out of the model.
 	factNothingText = "Тут проверять нечего."
+	// factNoTextText: neither the message nor its pictures have words to check.
+	factNoTextText = "Текста тут не вижу, проверять нечего."
+	// factPictureLabel heads the text read off a picture in the claim.
+	factPictureLabel = "Текст на картинке"
 	// factPrimaryLabel marks the source the model took for the closest to the
 	// original.
 	factPrimaryLabel = "Первоисточник: "
@@ -239,24 +243,86 @@ func factCheckFailText(err error) string {
 	}
 }
 
+// joinPictureText puts the text of a message and the text read off its
+// pictures into one claim, so the check sees everything that was said.
+func joinPictureText(text string, pictures []string) string {
+	parts := []string{}
+	if text = strings.TrimSpace(text); text != "" {
+		parts = append(parts, text)
+	}
+	for i, picture := range pictures {
+		label := factPictureLabel
+		if len(pictures) > 1 {
+			label = fmt.Sprintf("%s %d", factPictureLabel, i+1)
+		}
+		parts = append(parts, label+":\n"+picture)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// readFactPictures reads the text off each picture. Pictures without text are
+// left out; a picture that failed is skipped as long as another one was read.
+// The second value is the text to show when nothing could be read at all.
+func readFactPictures(ctx context.Context, b *bot.Bot, images []string) ([]string, string) {
+	texts := []string{}
+	failed, failText := 0, ""
+	for _, id := range images {
+		image, _, err := downloadTelegramFile(ctx, b, id)
+		if err != nil {
+			log.Println("[error] fact check picture download:", err)
+			failed++
+			failText = serverDeadText
+			if errors.Is(err, ErrFileTooBig) {
+				failText = fileTooBigText
+			}
+			continue
+		}
+		text, err := aiApi.ReadPictureText(image)
+		if err != nil {
+			log.Println("[error] fact check picture read:", err)
+			failed++
+			failText = serverDeadText
+			continue
+		}
+		if text != "" {
+			texts = append(texts, text)
+		}
+	}
+	log.Println("Fact check pictures:", len(images), "with text:", len(texts), "failed:", failed)
+
+	if failed == len(images) {
+		return nil, failText
+	}
+	return texts, ""
+}
+
 // processFactCheck checks the message the command replies to against a web
-// search. Like "что тут", a bare "проверь" replying to nothing is chatter and
-// gets no answer.
+// search, together with the text on its pictures. A picture with "проверь" as
+// its caption is checked too. Like "что тут", a bare "проверь" replying to
+// nothing is chatter and gets no answer.
 func processFactCheck(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatId := update.Message.Chat.ID
+	now := time.Now()
 
 	source := update.Message.ReplyToMessage
+	text := ""
 	if source == nil {
-		return
+		if getDescribableImageFileID(update.Message) == "" {
+			return
+		}
+		// The caption is the command itself, so only the pictures count.
+		source = update.Message
+	} else {
+		text = strings.TrimSpace(getMessageText(source))
+		if text == "" {
+			// A reply to a picture of an album: the caption is on another one.
+			text = strings.TrimSpace(albumCaptions.lookup(source, now))
+		}
+		if isFactCheckCommand(strings.ToLower(text)) {
+			text = ""
+		}
 	}
-	claim := strings.TrimSpace(getMessageText(source))
-	if claim == "" {
-		return
-	}
-
-	if replyIfMaintenance(ctx, b, update.Message) {
-		return
-	}
+	images := factImages(source, now)
 
 	reply := func(text string, replyToId int) {
 		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
@@ -268,48 +334,103 @@ func processFactCheck(ctx context.Context, b *bot.Bot, update *models.Update) {
 		utils.ProcessSendMessageError(err, chatId)
 	}
 
-	now := time.Now()
-	result := factGate.cached(claim, now)
-	if result == nil {
-		var userID int64
-		if update.Message.From != nil {
-			userID = update.Message.From.ID
+	if text == "" && len(images) == 0 {
+		// A video or a file without words still deserves an answer: silence
+		// looks like the bot is broken.
+		if hasMedia(source) {
+			reply(factNoTextText, update.Message.ID)
 		}
+		return
+	}
+
+	if replyIfMaintenance(ctx, b, update.Message) {
+		return
+	}
+
+	var userID int64
+	if update.Message.From != nil {
+		userID = update.Message.From.ID
+	}
+	admitted := false
+	admit := func() bool {
 		if !factGate.admit(userID, now) {
 			reply(aiLimitFallbackText, update.Message.ID)
-			return
+			return false
 		}
-		defer factGate.done(userID)
+		admitted = true
+		return true
+	}
+	defer func() {
+		if admitted {
+			factGate.done(userID)
+		}
+	}()
 
-		waitMsg, err := b.SendMessage(ctx, &bot.SendMessageParams{
+	var waitMsg *models.Message
+	sendWait := func() {
+		msg, err := b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:          chatId,
 			Text:            factCheckWaitText,
 			ReplyParameters: &models.ReplyParameters{MessageID: update.Message.ID},
 		})
 		utils.ProcessSendMessageError(err, chatId)
+		waitMsg = msg
+	}
+	// fail puts the text in place of the wait message.
+	fail := func(text string) {
+		if waitMsg == nil {
+			reply(text, update.Message.ID)
+			return
+		}
+		_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatId,
+			MessageID: waitMsg.ID,
+			Text:      text,
+		})
+		utils.ProcessSendMessageError(botError, chatId)
+	}
 
+	claim := text
+	if len(images) > 0 {
+		// Reading pictures costs llm calls, so it goes under the same limit as
+		// the check itself, before the cache can be asked.
+		if !admit() {
+			return
+		}
+		sendWait()
+		pictures, failText := readFactPictures(ctx, b, images)
+		if failText != "" && text == "" {
+			fail(failText)
+			return
+		}
+		claim = joinPictureText(text, pictures)
+		if claim == "" {
+			fail(factNoTextText)
+			return
+		}
+	}
+
+	result := factGate.cached(claim, now)
+	if result == nil {
+		if !admitted {
+			if !admit() {
+				return
+			}
+			sendWait()
+		}
+
+		var err error
 		result, err = aiApi.CheckFact(claim)
 		if err != nil {
 			log.Println("[error] fact check failed")
 			log.Println(err)
-			text := factCheckFailText(err)
-			if waitMsg == nil {
-				reply(text, update.Message.ID)
-				return
-			}
-			_, botError := b.EditMessageText(ctx, &bot.EditMessageTextParams{
-				ChatID:    chatId,
-				MessageID: waitMsg.ID,
-				Text:      text,
-			})
-			utils.ProcessSendMessageError(botError, chatId)
+			fail(factCheckFailText(err))
 			return
 		}
 		factGate.remember(claim, result, now)
-
-		if waitMsg != nil {
-			b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: chatId, MessageID: waitMsg.ID})
-		}
+	}
+	if waitMsg != nil {
+		b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: chatId, MessageID: waitMsg.ID})
 	}
 
 	if result.Verdict == aiApi.FactNotCheckable {
