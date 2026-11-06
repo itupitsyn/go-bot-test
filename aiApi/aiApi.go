@@ -1,5 +1,7 @@
 package aiApi
 
+import "time"
+
 // The caller of a generation says who is asking (the id the service uses for
 // the per-user cap and the round-robin) and where to report the place in the
 // queue. A refusal over the cap comes back as ErrQueueFull.
@@ -42,6 +44,14 @@ func GetTranscription(mediaBytes []byte, mediaName string, caller Caller) (strin
 // profile and may be empty.
 func GetSummary(text, languageCode string) (string, error) {
 	return generateSummary(text, languageCode)
+}
+
+// CheckFact checks a claim against a web search. A failed search comes back as
+// ErrSearchUnavailable (our search server is down) or ErrSearchEnginesDown (it
+// is up, but every engine behind it refused), never as "not found". The bot's
+// searches share one queue; when it is over five minutes long, ErrSearchBusy.
+func CheckFact(claim string) (*FactCheck, error) {
+	return checkFact(claim, time.Now())
 }
 
 // GetImageDescription describes what is in an image, in the language of the

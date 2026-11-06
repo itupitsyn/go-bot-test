@@ -164,6 +164,9 @@ func getHandler() bot.HandlerFunc {
 			} else if isSummaryCommand(msgTextLower) {
 				log.Println("Summary requested by", userName)
 				processSummary(ctx, b, update)
+			} else if isFactCheckCommand(msgTextLower) {
+				log.Println("Fact check requested by", userName)
+				processFactCheck(ctx, b, update)
 			} else if strings.HasPrefix(msgTextLower, "/stickers_delete") || strings.HasPrefix(msgTextLower, "/stickers_delete@"+botName) {
 				// Строго ДО /stickers: HasPrefix("/stickers_delete", "/stickers")
 				// истинно, и обратный порядок увёл бы удаление в генерацию.
