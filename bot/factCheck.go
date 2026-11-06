@@ -16,7 +16,18 @@ import (
 )
 
 const (
-	factCheckWaitText = "Ща, проверю"
+	// A check now reads the message, searches two engines, sometimes twice, and
+	// takes about 40 s: the wait text says so.
+	factCheckWaitText = "Ща, проверю. Это может занять до минуты"
+	// factNothingText answers a message with nothing to check when no joke came
+	// out of the model.
+	factNothingText = "Тут проверять нечего."
+	// factPrimaryLabel marks the source the model took for the closest to the
+	// original.
+	factPrimaryLabel = "Первоисточник: "
+	// factJokeMemory is how many of its last jokes per chat the bot shows the
+	// model, so the same trick does not come round again and again.
+	factJokeMemory = 5
 
 	// The two search failures read differently on purpose: one is our own
 	// server lying down, the other is the engines refusing us (a captcha, a
@@ -68,6 +79,33 @@ var factGate = &factCheckGate{
 	cache:   map[string]factCacheEntry{},
 	asked:   map[int64][]time.Time{},
 	running: map[int64]bool{},
+}
+
+// factJokeLog keeps each chat's last jokes. In memory only: after a restart the
+// first jokes may repeat a trick from before it, which is harmless.
+type factJokeLog struct {
+	mu     sync.Mutex
+	byChat map[int64][]string
+}
+
+var factJokes = &factJokeLog{byChat: map[int64][]string{}}
+
+func (l *factJokeLog) recent(chatID int64) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return append([]string(nil), l.byChat[chatID]...)
+}
+
+func (l *factJokeLog) remember(chatID int64, joke string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	jokes := append(l.byChat[chatID], joke)
+	if len(jokes) > factJokeMemory {
+		jokes = jokes[len(jokes)-factJokeMemory:]
+	}
+	l.byChat[chatID] = jokes
 }
 
 func factCacheKey(claim string) string {
@@ -166,6 +204,9 @@ func formatFactCheck(result *aiApi.FactCheck) string {
 	}
 
 	lines := []string{head}
+	if result.Primary != nil && result.Primary.URL != "" {
+		lines = append(lines, factPrimaryLabel+result.Primary.URL)
+	}
 	for i, item := range result.Evidence {
 		if i == maxEvidenceShown {
 			break
@@ -271,6 +312,21 @@ func processFactCheck(ctx context.Context, b *bot.Bot, update *models.Update) {
 		}
 	}
 
-	log.Println("Fact check verdict:", result.Verdict, "evidence:", len(result.Evidence))
+	if result.Verdict == aiApi.FactNotCheckable {
+		joke, err := aiApi.GenerateFactJoke(claim, factJokes.recent(chatId))
+		if err != nil {
+			log.Println("[error] fact check joke:", err)
+		}
+		if joke == "" {
+			joke = factNothingText
+		} else {
+			factJokes.remember(chatId, joke)
+		}
+		log.Println("Fact check verdict:", result.Verdict)
+		reply(joke, source.ID)
+		return
+	}
+
+	log.Println("Fact check verdict:", result.Verdict, "evidence:", len(result.Evidence), "primary:", result.Primary != nil)
 	reply(formatFactCheck(result), source.ID)
 }

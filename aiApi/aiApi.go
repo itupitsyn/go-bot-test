@@ -54,6 +54,13 @@ func CheckFact(claim string) (*FactCheck, error) {
 	return checkFact(claim, time.Now())
 }
 
+// GenerateFactJoke answers a message with nothing to check with a joke about
+// being asked to check it. recent are the bot's last jokes in that chat, so the
+// same trick does not come round again. An empty string means no joke survived.
+func GenerateFactJoke(message string, recent []string) (string, error) {
+	return generateFactJoke(message, recent)
+}
+
 // GetImageDescription describes what is in an image, in the language of the
 // languageCode IETF tag from the Telegram profile (Russian when it is empty or
 // unknown).

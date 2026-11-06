@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"telebot/aiApi"
 	"telebot/bot"
 	"telebot/database"
 	"telebot/model"
@@ -149,6 +150,9 @@ func loadDatabase() {
 	if err := db.AutoMigrate(&model.BirthdayReminder{}); err != nil {
 		log.Fatal("Error migrating BirthdayReminder", err)
 	}
+	if err := db.AutoMigrate(&model.SearchUsage{}); err != nil {
+		log.Fatal("Error migrating SearchUsage", err)
+	}
 	// Снимаем уникальность с users.name. Она осталась от прежней схемы, а
 	// AutoMigrate ограничения не убирает — в модели поле давно объявлено
 	// обычным индексом, и база с кодом разошлись.
@@ -167,6 +171,20 @@ func loadDatabase() {
 	log.Println("Successfully migrated all tables")
 
 	model.Init(db)
+
+	// The fact check may use Brave only through this budget: a request is
+	// counted in the database before it goes, and past the month's limit the
+	// check searches with Yandex alone. A database error refuses, never allows.
+	braveLimit := aiApi.BraveMonthlyLimit()
+	aiApi.BraveQuota = func() bool {
+		ok, err := model.ReserveSearchQuota("brave", braveLimit, time.Now())
+		if err != nil {
+			log.Println("[error] brave quota:", err)
+			return false
+		}
+		return ok
+	}
+	log.Println("Brave search budget per month:", braveLimit)
 
 	if err := model.PopulateRoles(); err != nil {
 		log.Fatal("Error populating roles", err)

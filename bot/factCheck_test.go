@@ -129,3 +129,41 @@ func TestFactCheckGateCache(t *testing.T) {
 		t.Errorf("cache grew to %d", len(gate.cache))
 	}
 }
+
+func TestFormatFactCheckShowsThePrimarySourceFirst(t *testing.T) {
+	text := formatFactCheck(&aiApi.FactCheck{
+		Verdict:  aiApi.FactConfirmed,
+		Primary:  &aiApi.FactSource{URL: "https://www.anthropic.com/news"},
+		Evidence: []aiApi.FactEvidence{{Quote: "Haiku 5.5 is out", URL: "https://news.example/a", Supports: true}},
+	})
+	want := factConfirmedText + "\n" + factPrimaryLabel + "https://www.anthropic.com/news\n\n«Haiku 5.5 is out»\nhttps://news.example/a"
+	if text != want {
+		t.Errorf("got %q, want %q", text, want)
+	}
+
+	noPrimary := formatFactCheck(&aiApi.FactCheck{Verdict: aiApi.FactRefuted, Primary: &aiApi.FactSource{}})
+	if strings.Contains(noPrimary, factPrimaryLabel) {
+		t.Errorf("an empty primary must not be shown: %q", noPrimary)
+	}
+}
+
+func TestFactJokeLogKeepsTheLastFewPerChat(t *testing.T) {
+	log := &factJokeLog{byChat: map[int64][]string{}}
+	for i := 0; i < factJokeMemory+3; i++ {
+		log.remember(1, fmt.Sprintf("joke %d", i))
+	}
+	log.remember(2, "other chat")
+
+	recent := log.recent(1)
+	if len(recent) != factJokeMemory || recent[0] != "joke 3" || recent[len(recent)-1] != fmt.Sprintf("joke %d", factJokeMemory+2) {
+		t.Errorf("chat 1: %v", recent)
+	}
+	if other := log.recent(2); len(other) != 1 || other[0] != "other chat" {
+		t.Errorf("chats must not share jokes: %v", other)
+	}
+
+	recent[0] = "changed"
+	if log.recent(1)[0] == "changed" {
+		t.Error("recent must hand out a copy")
+	}
+}
