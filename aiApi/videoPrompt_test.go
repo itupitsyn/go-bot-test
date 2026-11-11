@@ -549,3 +549,133 @@ func TestTranslatedLineInShotIsOnlyLogged(t *testing.T) {
 		t.Errorf("реплика в кадре пропала вместо того, чтобы остаться: %q", prompt)
 	}
 }
+
+// TestTranslationFallbackStaysInsideTheBudget is the case where the two
+// repairs meet: the model shortens the retelling AND translates it, the guard
+// puts the whole request back, and the shortening is undone. Left alone, a
+// request a little over budget lands in the band where speech GARBLES — far
+// over it truncates cleanly, so the dangerous length is the near one.
+func TestTranslationFallbackStaysInsideTheBudget(t *testing.T) {
+	long := "Власти города сегодня утвердили новые правила движения для " +
+		"электрических самокатов в центральной части города, сообщает " +
+		"пресс-служба мэрии, документ вступит в силу с первого декабря"
+	planLLM(t, `{"form":"narrator",
+		"scene":"A city street. Nobody in the shot speaks. An unseen narrator tells over the footage:",
+		"lines":["City authorities approved new scooter rules."],
+		"camera":"a slow pan","sound":"street noise"}`)
+
+	prompt, _, err := buildVideoPrompt(long, 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	said := prompt[strings.Index(prompt, speechOpen)+len(speechOpen):]
+	said = said[:strings.Index(said, speechClose)]
+	if words := len(strings.Fields(said)); words != wordBudget(5) {
+		t.Errorf("диктору осталось %d слов при бюджете %d: %q",
+			words, wordBudget(5), said)
+	}
+	if !strings.HasPrefix(said, "Власти города сегодня") {
+		t.Errorf("вернули не слова человека: %q", said)
+	}
+}
+
+// TestNarrationThatFitsIsLeftAlone: the backstop must not touch text that the
+// model already shortened properly. Cutting at a word boundary is brutal next
+// to a retelling done by meaning.
+func TestNarrationThatFitsIsLeftAlone(t *testing.T) {
+	planLLM(t, `{"form":"narrator",
+		"scene":"A city street. Nobody in the shot speaks. An unseen narrator tells over the footage:",
+		"lines":["Город утвердил правила для самокатов."],
+		"camera":"a slow pan","sound":"street noise"}`)
+
+	prompt, _, err := buildVideoPrompt("длинная новость про самокаты и правила", 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(prompt, speechOpen+"Город утвердил правила для самокатов."+speechClose) {
+		t.Errorf("короткий пересказ порезали зря: %q", prompt)
+	}
+}
+
+// TestLongerClipKeepsMoreWords ties the backstop to the measured law: three
+// words a second, linear in the length.
+func TestLongerClipKeepsMoreWords(t *testing.T) {
+	words := make([]string, 60)
+	for i := range words {
+		words[i] = "слово"
+	}
+	long := strings.Join(words, " ")
+
+	if got := len(clipToBudget([]string{long}, wordBudget(5))); got != 1 {
+		t.Fatalf("после обрезки осталось %d строк, ждали одну", got)
+	}
+	five := strings.Fields(clipToBudget([]string{long}, wordBudget(5))[0])
+	fifteen := strings.Fields(clipToBudget([]string{long}, wordBudget(15))[0])
+	if len(five) != 15 || len(fifteen) != 45 {
+		t.Errorf("на 5 с осталось %d слов, на 15 с — %d; ждали 15 и 45",
+			len(five), len(fifteen))
+	}
+}
+
+// TestDialogueSceneIsNotHandedToANarrator is a production case of 11.11.2026,
+// reported by the owner: a lightsaber duel between two named people. The form
+// came back "dialogue" — two shouted lines, one each — and the scene
+// nevertheless ended with "then an unseen narrator tells over the footage:".
+// H3 was asked to read two shouted lines over an epic battle in a voice
+// belonging to nobody on screen, and delivered them half sung.
+func TestDialogueSceneIsNotHandedToANarrator(t *testing.T) {
+	planLLM(t, `{"form":"dialogue",
+		"scene":"Two men duel with lightsabers over lava. They fight on, then an unseen narrator tells over the footage:",
+		"lines":["Ты был мне как брат","Ненавижу!"],
+		"camera":"a tracking shot","sound":"the hum of blades"}`)
+
+	prompt, _, err := buildVideoPrompt(`дуэль на мечах, первый кричит «Ты был мне как брат», второй кричит «Ненавижу!»`, 15)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(strings.ToLower(prompt), "narrator") {
+		t.Errorf("речь в кадре отдали диктору: %q", prompt)
+	}
+	if !strings.Contains(prompt, speakerIntro+" "+speechOpen) {
+		t.Errorf("сцена не передаёт слово говорящим: %q", prompt)
+	}
+	if strings.Count(prompt, speechOpen) != 2 {
+		t.Errorf("двух говорящих склеили: %q", prompt)
+	}
+}
+
+// TestNarratorKeepsItsOwnIntro is the other side: the repair must not fire on
+// the form the phrase belongs to.
+func TestNarratorKeepsItsOwnIntro(t *testing.T) {
+	planLLM(t, `{"form":"narrator",
+		"scene":"A city street. Nobody in the shot speaks. An unseen narrator tells over the footage:",
+		"lines":["Город утвердил правила"],"camera":"a slow pan","sound":"street noise"}`)
+
+	prompt, _, err := buildVideoPrompt("город утвердил правила для самокатов", 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(strings.ToLower(prompt), "unseen narrator") {
+		t.Errorf("у диктора отобрали его собственную подводку: %q", prompt)
+	}
+}
+
+// TestSpeaksSceneKeepsAProperIntro: the repair cuts only the narrator clause,
+// and leaves a scene that already hands over correctly alone.
+func TestSpeaksSceneKeepsAProperIntro(t *testing.T) {
+	planLLM(t, `{"form":"speaks","scene":"A woman turns to the camera and then she says:",
+		"lines":["привет"],"camera":"a push-in","sound":"a quiet room"}`)
+
+	prompt, _, err := buildVideoPrompt(`женщина говорит «привет»`, 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(prompt, "and then she says: "+speechOpen) {
+		t.Errorf("правильную подводку испортили: %q", prompt)
+	}
+}

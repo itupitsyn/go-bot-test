@@ -240,10 +240,16 @@ order and take the first that fits:
   "silent" — the request describes a scene, a picture, a joke, an insult or a
     statement about someone, and asks for no speech at all.
 
-"scene": what the camera sees, in English, translated from the request. One or
-two sentences, only what is visible. No lighting, no style, no sound, no
-camera movement. Do not put the spoken words in it — they go to "lines" and
-nowhere else. Then, depending on the form:
+"scene": what the camera sees, in English, translated from the request. Only
+what is visible: no lighting, no style, no sound, no camera movement. Do not
+put the spoken words in it — they go to "lines" and nowhere else.
+
+Keep EVERY beat the person described, in their order, to the end. A request
+that ends with somebody losing their limbs and catching fire is a request for
+that, and "until the fight ends" is not it. Write as many sentences as the
+request needs — a few words deserve one, a whole scenario deserves all of it.
+
+Then, depending on the form:
 
   "speaks" and "dialogue" — the speaker is visible; end the scene with the
     words that introduce the speech, for example "and then she says:".
@@ -287,7 +293,7 @@ func planVideo(request string, seconds float64) (videoPlan, error) {
 		return videoPlan{}, err
 	}
 
-	return parseVideoPlan(answer, request)
+	return parseVideoPlan(answer, request, seconds)
 }
 
 // budgetNote tells the model how much narration fits. It is written in the
@@ -395,6 +401,52 @@ func trimSpeechIntro(scene string) string {
 	return strings.TrimRight(tidy(strings.TrimSuffix(scene, ":")), ",;")
 }
 
+// narratorIntro is the hand-over the voice-over form ends its scene with. The
+// model reaches for it under the other forms too: caught in production on
+// 11.11.2026 on a lightsaber duel between two named people, where the form
+// came back "dialogue" and the scene nevertheless said an unseen narrator
+// tells it. H3 was then asked to read two shouted lines over an epic battle in
+// a voice belonging to nobody on screen, and it delivered them half sung.
+var narratorIntro = regexp.MustCompile(
+	`(?i)[^.!?]*\b(unseen|off-?screen|voice[- ]over|narrator)\b[^.!?]*:\s*$`)
+
+// speakerIntro is what stands there instead when somebody in the shot speaks.
+const speakerIntro = "and then they say:"
+
+// ownVoice repairs a scene that hands the words to a narrator while the form
+// says they are spoken in shot. The scene is the only part of the prompt H3
+// acts on, so a contradiction between the two is not cosmetic: it decides
+// whose mouth the words come out of, and whether they are spoken at all.
+func ownVoice(scene, form string) string {
+	if form == formNarrator || form == formSilent {
+		return scene
+	}
+
+	if at := narratorIntro.FindStringIndex(scene); at != nil {
+		log.Printf("video plan: the scene handed %q speech to a narrator, repairing\n", form)
+
+		return strings.TrimRight(strings.TrimSpace(scene[:at[0]]), " ,;.") +
+			" " + speakerIntro
+	}
+
+	return scene
+}
+
+// clipToBudget cuts the narration down to what can be spoken, at a word
+// boundary. It does nothing when the text already fits, which is the usual
+// case: the model is told the budget and keeps to it.
+func clipToBudget(lines []string, budget int) []string {
+	words := strings.Fields(strings.Join(lines, " "))
+	if len(words) <= budget || budget <= 0 {
+		return lines
+	}
+
+	log.Printf("video plan: the narration is %d words for a budget of %d, cutting\n",
+		len(words), budget)
+
+	return []string{strings.Join(words[:budget], " ")}
+}
+
 // translated says whether the lines came back in another alphabet than the
 // request. Cyrillic against Latin is the only pair that matters here: the
 // journal is Russian almost to the last request, and a Latin-only line under a
@@ -445,7 +497,7 @@ func knownForm(form string, lines []string) string {
 // parseVideoPlan reads the answer and refuses what it cannot vouch for. The
 // request comes with it: some of the reading can only be judged against what
 // the person actually wrote.
-func parseVideoPlan(answer, request string) (videoPlan, error) {
+func parseVideoPlan(answer, request string, seconds float64) (videoPlan, error) {
 	var plan videoPlan
 	if err := json.Unmarshal([]byte(unfence(answer)), &plan); err != nil {
 		return videoPlan{}, fmt.Errorf("video plan is not valid json (%w): %s", err, answer)
@@ -524,6 +576,23 @@ func parseVideoPlan(answer, request string) (videoPlan, error) {
 		} else {
 			log.Printf("video plan: the line came back translated: %q from %q\n", plan.Lines, request)
 		}
+	}
+
+	plan.Scene = ownVoice(plan.Scene, plan.Form)
+
+	// The narration is ours, so its length is ours to answer for. The model is
+	// asked to fit the budget and usually does; this is the backstop for when
+	// it does not, and for the case where the two repairs meet: the model
+	// shortens the retelling AND translates it, the guard above puts the whole
+	// request back, and the shortening is undone.
+	//
+	// Leaving it long would not be neutral. Speech degrades in a narrow band:
+	// a little over budget GARBLES ("Сообща ЖБА мэрии"), far over truncates
+	// cleanly. Falling back to a request of twenty words on a five-second clip
+	// lands exactly in the band, so the backstop keeps us at the budget, where
+	// nothing is spoiled.
+	if plan.Form == formNarrator {
+		plan.Lines = clipToBudget(plan.Lines, wordBudget(seconds))
 	}
 
 	if plan.Form != formNarrator && !keepSpokenLines(plan.Lines, request) {
