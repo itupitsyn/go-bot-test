@@ -59,22 +59,3 @@ func TestContentOfBadResponses(t *testing.T) {
 		}
 	}
 }
-
-func TestApplyPromptTemplate(t *testing.T) {
-	cases := [][3]string{
-		// A period at the end of the translation must not double up with the
-		// template's period.
-		{"%s. Anime key visual.", "A cat on a roof.", "A cat on a roof. Anime key visual."},
-		{"%s. Anime key visual.", "A cat on a roof", "A cat on a roof. Anime key visual."},
-		{"%s. Anime key visual.", "  A cat on a roof ,", "A cat on a roof. Anime key visual."},
-		{"%s", "A cat on a roof.", "A cat on a roof"},
-		// Punctuation inside the phrase is left alone.
-		{"%s. Neon.", "A cat, a dog and a roof.", "A cat, a dog and a roof. Neon."},
-	}
-
-	for _, c := range cases {
-		if got := applyPromptTemplate(c[0], c[1]); got != c[2] {
-			t.Errorf("applyPromptTemplate(%q, %q): want %q, got %q", c[0], c[1], c[2], got)
-		}
-	}
-}

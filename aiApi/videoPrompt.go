@@ -287,8 +287,9 @@ const narratorBudgetNote = "\n\n(Если форма окажется narrator, 
 // The length of the clip travels with it. Until 11.11.2026 it did not: the bot
 // cut "10 секунд" off the text and kept the number to itself, so the plan
 // wrote a voice-over for a clip whose length it had no idea about.
-func planVideo(request string, seconds float64) (videoPlan, error) {
-	answer, err := askLLM(videoPlanPrompt, request+budgetNote(seconds))
+func planVideo(request string, seconds float64, photo string) (videoPlan, error) {
+	answer, err := askLLM(videoPlanPrompt,
+		request+photoContext(photo)+budgetNote(seconds))
 	if err != nil {
 		return videoPlan{}, err
 	}
@@ -413,10 +414,30 @@ var narratorIntro = regexp.MustCompile(
 // speakerIntro is what stands there instead when somebody in the shot speaks.
 const speakerIntro = "and then they say:"
 
-// ownVoice repairs a scene that hands the words to a narrator while the form
-// says they are spoken in shot. The scene is the only part of the prompt H3
-// acts on, so a contradiction between the two is not cosmetic: it decides
-// whose mouth the words come out of, and whether they are spoken at all.
+// handsOver says whether the scene ends where a quote is expected: with the
+// words that introduce speech, and a colon after them.
+var handsOver = regexp.MustCompile(
+	`(?i)\b(says?|said|say|shouts?|whispers?|asks?|answers?|replies|replied|` +
+		`sings?|speaks?|utters?|adds?|tells?)\b[^.!?]{0,20}:\s*$`)
+
+// ownVoice makes the scene hand the shot over to the words, in the voice the
+// form calls for. Two things are repaired here, and both were caught in
+// production on 11.11.2026.
+//
+// A scene that hands the words to a NARRATOR while the form says they are
+// spoken in shot: a lightsaber duel between two named people came back as
+// "dialogue" with "then an unseen narrator tells over the footage:", and H3,
+// asked to read two shouted lines in a voice belonging to nobody on screen,
+// delivered them half sung.
+//
+// A scene that hands them over to NOBODY: three lines were glued to the end of
+// a story that finished with "...and leads her to the bed", with no colon and
+// no introducing words anywhere. H3 reads aloud whatever stands where a quote
+// belongs, and with nothing marking that place it invented a language.
+//
+// The guarantee used to live in code, was moved into the system prompt on the
+// morning of the same day, and the move was measured: the model hands over by
+// itself in 28 scenes of 38. The missing quarter is what reached people.
 func ownVoice(scene, form string) string {
 	if form == formNarrator || form == formSilent {
 		return scene
@@ -427,6 +448,13 @@ func ownVoice(scene, form string) string {
 
 		return strings.TrimRight(strings.TrimSpace(scene[:at[0]]), " ,;.") +
 			" " + speakerIntro
+	}
+
+	if !handsOver.MatchString(scene) {
+		log.Printf("video plan: the scene for %q introduces no speech, repairing\n", form)
+
+		return strings.TrimRight(strings.TrimSpace(scene), " ,;.") +
+			". " + capitalised(speakerIntro)
 	}
 
 	return scene
@@ -578,8 +606,6 @@ func parseVideoPlan(answer, request string, seconds float64) (videoPlan, error) 
 		}
 	}
 
-	plan.Scene = ownVoice(plan.Scene, plan.Form)
-
 	// The narration is ours, so its length is ours to answer for. The model is
 	// asked to fit the budget and usually does; this is the backstop for when
 	// it does not, and for the case where the two repairs meet: the model
@@ -659,14 +685,14 @@ func speechBlocks(lines []string, form string) string {
 //
 // It also reports where the prompt came from. The plan is a lossy reading of
 // the request, and the raw words are worth keeping: see promptOrigin.
-func buildVideoPrompt(msgText string, seconds float64) (string, promptOrigin, error) {
+func buildVideoPrompt(msgText string, seconds float64, photo string) (string, promptOrigin, error) {
 	request := tidy(stripMarkers(msgText))
 	origin := promptOrigin{Source: msgText}
 
 	plan := videoPlan{Form: formSilent, Scene: request,
 		Camera: defaultCamera, Sound: defaultSound}
 	if request != "" && request != DefaultAnimationPrompt {
-		planned, err := planVideo(request, seconds)
+		planned, err := planVideo(request, seconds, photo)
 		if err != nil {
 			return "", origin, err
 		}
@@ -689,6 +715,13 @@ func buildVideoPrompt(msgText string, seconds float64) (string, promptOrigin, er
 		if len(plan.Lines) > 0 {
 			subject = defaultSpeakerSubject
 		}
+	}
+
+	// После подстановки говорящего по умолчанию, а не до: у просьбы, которая
+	// вся состоит из реплики, сцены нет вовсе, и подводку надо ставить тому,
+	// кого мы сами и придумали.
+	if len(plan.Lines) > 0 {
+		subject = ownVoice(subject, plan.Form)
 	}
 
 	// The order is the one the templates held and it is not cosmetic: the line

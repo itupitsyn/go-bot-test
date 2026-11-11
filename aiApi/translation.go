@@ -106,18 +106,3 @@ func postLLM(requestBody []byte) (string, error) {
 func translatePrompt(text string) (string, error) {
 	return askLLM(translateSystemPrompt, text)
 }
-
-// applyPromptTemplate substitutes the subject into a motion template.
-//
-// Video only since 25.10.2026: the picture styles it also served are gone,
-// replaced by prompt enhancement (see promptEnhancer.go). Camera templates
-// stay because people do reach for them — "pull-back" is on 48 clips of 162.
-//
-// Trailing punctuation of the translation is cut off: the templates continue
-// the sentence after their own period, and without this you get "...watching
-// the sunset.. Hard-surface mecha".
-func applyPromptTemplate(template, subject string) string {
-	subject = strings.TrimRight(strings.TrimSpace(subject), " .,;:")
-
-	return strings.Replace(template, "%s", subject, 1)
-}

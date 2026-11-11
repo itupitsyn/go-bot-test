@@ -54,7 +54,7 @@ func getT2VId(prompt string, width, height, fps int, seconds float64, caller Cal
 }
 
 func generateT2V(prompt string, seconds float64, caller Caller) (error, []byte) {
-	videoPrompt, origin, err := buildVideoPrompt(prompt, seconds)
+	videoPrompt, origin, err := buildVideoPrompt(prompt, seconds, "")
 	if err != nil {
 		return err, nil
 	}

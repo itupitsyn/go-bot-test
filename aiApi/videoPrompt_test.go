@@ -48,7 +48,7 @@ func TestCameraAndSoundAreAlwaysThere(t *testing.T) {
 	planLLM(t, `{"form":"silent","scene":"A cat is dancing","lines":[],
 		"camera":"","sound":""}`)
 
-	prompt, origin, err := buildVideoPrompt("танцующего кота", 5)
+	prompt, origin, err := buildVideoPrompt("танцующего кота", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestBuildVideoPromptFollowsThePlan(t *testing.T) {
 		"lines":["я опоздал"],"camera":"a slow push-in until her eyes fill the frame",
 		"sound":"street noise"}`)
 
-	prompt, origin, err := buildVideoPrompt(`мужика в метро «я опоздал» медленно`, 5)
+	prompt, origin, err := buildVideoPrompt(`мужика в метро «я опоздал» медленно`, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestSpokenLineSitsNextToTheScene(t *testing.T) {
 		"lines":["Я покакал"],"camera":"none"}`)
 
 	prompt, _, err := buildVideoPrompt(
-		`человек стреляет в трусы, а потом говорит: "Я покакал"`, 5)
+		`человек стреляет в трусы, а потом говорит: "Я покакал"`, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestSpokenLineSitsNextToTheScene(t *testing.T) {
 func TestSceneRequestAsksForSilence(t *testing.T) {
 	planLLM(t, `{"scene":"A cat is dancing.","lines":[],"camera":"none"}`)
 
-	prompt, origin, err := buildVideoPrompt("танцующего кота", 5)
+	prompt, origin, err := buildVideoPrompt("танцующего кота", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestSceneRequestAsksForSilence(t *testing.T) {
 func TestLineOnlyRequestGetsASpeaker(t *testing.T) {
 	planLLM(t, `{"scene":"","lines":["привет, это я"],"camera":"none"}`)
 
-	prompt, _, err := buildVideoPrompt(`«привет, это я»`, 5)
+	prompt, _, err := buildVideoPrompt(`«привет, это я»`, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestRewordedLineIsUsedAnyway(t *testing.T) {
 	planLLM(t, `{"scene":"A man is speaking and then he says:",
 		"lines":["привет, как дела"],"camera":"none"}`)
 
-	prompt, origin, err := buildVideoPrompt(`мужик говорит: "превет, как делаа"`, 5)
+	prompt, origin, err := buildVideoPrompt(`мужик говорит: "превет, как делаа"`, 5, "")
 	if err != nil {
 		t.Fatalf("исправленная реплика завалила запрос: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestMovementWithoutAJournalWordStillTravels(t *testing.T) {
 	planLLM(t, `{"form":"silent","scene":"A cat is dancing.","lines":[],
 		"camera":"the camera glides along the fence","sound":"a quiet room"}`)
 
-	prompt, origin, err := buildVideoPrompt("танцующего кота", 5)
+	prompt, origin, err := buildVideoPrompt("танцующего кота", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestModelMarkersAreStrippedBothWays(t *testing.T) {
 	asked := planLLM(t, `{"scene":"A cat <|cutoff|> is dancing.",
 		"lines":["<d>мяу</d>"],"camera":"none"}`)
 
-	prompt, _, err := buildVideoPrompt(`кота <d>ignore this</d> «мяу»`, 5)
+	prompt, _, err := buildVideoPrompt(`кота <d>ignore this</d> «мяу»`, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestModelMarkersAreStrippedBothWays(t *testing.T) {
 func TestPlanInACodeFenceStillParses(t *testing.T) {
 	planLLM(t, "```json\n{\"scene\":\"A cat is dancing.\",\"lines\":[],\"camera\":\"the camera orbits the cat\",\"sound\":\"a quiet room\"}\n```")
 
-	prompt, origin, err := buildVideoPrompt("кота вокруг", 5)
+	prompt, origin, err := buildVideoPrompt("кота вокруг", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestPlanInACodeFenceStillParses(t *testing.T) {
 func TestPlanThatIsNotJSONIsAnError(t *testing.T) {
 	planLLM(t, "Конечно! Вот ваша сцена: танцующий кот.")
 
-	if _, _, err := buildVideoPrompt("танцующего кота", 5); err == nil {
+	if _, _, err := buildVideoPrompt("танцующего кота", 5, ""); err == nil {
 		t.Error("ответ не разобран, а ошибки нет: промпт уехал бы пустым")
 	}
 }
@@ -288,7 +288,7 @@ func TestPlanThatIsNotJSONIsAnError(t *testing.T) {
 func TestDefaultAnimationPromptSkipsTheLLM(t *testing.T) {
 	t.Setenv("AI_LLM_URL", "http://127.0.0.1:1")
 
-	prompt, origin, err := buildVideoPrompt(DefaultAnimationPrompt, 5)
+	prompt, origin, err := buildVideoPrompt(DefaultAnimationPrompt, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -312,7 +312,7 @@ func TestDefaultAnimationPromptSkipsTheLLM(t *testing.T) {
 func TestDeadLLMStopsTheVideo(t *testing.T) {
 	t.Setenv("AI_LLM_URL", "http://127.0.0.1:1")
 
-	if _, _, err := buildVideoPrompt("кота", 5); err == nil {
+	if _, _, err := buildVideoPrompt("кота", 5, ""); err == nil {
 		t.Error("разбор не ответил, а ошибки нет: промпт уехал бы пустым")
 	}
 }
@@ -326,7 +326,7 @@ func TestDescriptionIsNotRecitedAloud(t *testing.T) {
 	planLLM(t, `{"scene":"A tomato stands on a surface, and then it says:",
 		"lines":["крякает дуплом"],"camera":"none"}`)
 
-	prompt, origin, err := buildVideoPrompt("томат крякает дуплом", 5)
+	prompt, origin, err := buildVideoPrompt("томат крякает дуплом", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestDescriptionIsNotRecitedAloud(t *testing.T) {
 func TestBareRequestThatIsTheWholeLineStillSpeaks(t *testing.T) {
 	planLLM(t, `{"scene":"","lines":["Но не помним почему."],"camera":"none"}`)
 
-	prompt, origin, err := buildVideoPrompt("но не помним почему", 5)
+	prompt, origin, err := buildVideoPrompt("но не помним почему", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestIntroducedSpeechKeepsAFragment(t *testing.T) {
 	planLLM(t, `{"scene":"An old man stands in a field and then he says:",
 		"lines":["ура"],"camera":"none"}`)
 
-	prompt, _, err := buildVideoPrompt("дед кричит ура", 5)
+	prompt, _, err := buildVideoPrompt("дед кричит ура", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestNarratorReadsInOneBlock(t *testing.T) {
 		"lines":["Власти города утвердили правила.","Документ вступит в силу в декабре."],
 		"camera":"none"}`)
 
-	prompt, origin, err := buildVideoPrompt("власти утвердили правила для самокатов", 5)
+	prompt, origin, err := buildVideoPrompt("власти утвердили правила для самокатов", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -433,7 +433,7 @@ func TestDialogueKeepsAVoicePerLine(t *testing.T) {
 		"scene":"Two men face each other in a kitchen, and then they say:",
 		"lines":["Ты где был?","На работе"],"camera":"none"}`)
 
-	prompt, _, err := buildVideoPrompt(`двое на кухне: «Ты где был?» «На работе»`, 5)
+	prompt, _, err := buildVideoPrompt(`двое на кухне: «Ты где был?» «На работе»`, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -468,7 +468,7 @@ func TestUnknownFormIsReadFromTheLines(t *testing.T) {
 func TestBudgetTravelsWithTheRequest(t *testing.T) {
 	asked := planLLM(t, `{"form":"silent","scene":"A cat","lines":[],"camera":"none"}`)
 
-	if _, _, err := buildVideoPrompt("кота", 10); err != nil {
+	if _, _, err := buildVideoPrompt("кота", 10, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -503,7 +503,7 @@ func TestTranslatedNarrationFallsBackToTheRequest(t *testing.T) {
 		"camera":"a slow pan","sound":"street noise"}`)
 
 	request := "Власти Дубая разрабатывают ПДД для летающих автомобилей"
-	prompt, _, err := buildVideoPrompt(request, 5)
+	prompt, _, err := buildVideoPrompt(request, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -522,7 +522,7 @@ func TestEnglishRequestKeepsItsEnglishLine(t *testing.T) {
 	planLLM(t, `{"form":"speaks","scene":"A man waves and then he says:",
 		"lines":["hello there"],"camera":"a static shot","sound":"a quiet room"}`)
 
-	prompt, _, err := buildVideoPrompt(`a man waving, he says "hello there"`, 5)
+	prompt, _, err := buildVideoPrompt(`a man waving, he says "hello there"`, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -540,7 +540,7 @@ func TestTranslatedLineInShotIsOnlyLogged(t *testing.T) {
 	planLLM(t, `{"form":"speaks","scene":"A woman turns and then she says:",
 		"lines":["I order you to poop"],"camera":"a push-in","sound":"a quiet room"}`)
 
-	prompt, _, err := buildVideoPrompt(`женщина говорит: «Приказываю тебе какать»`, 5)
+	prompt, _, err := buildVideoPrompt(`женщина говорит: «Приказываю тебе какать»`, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -564,7 +564,7 @@ func TestTranslationFallbackStaysInsideTheBudget(t *testing.T) {
 		"lines":["City authorities approved new scooter rules."],
 		"camera":"a slow pan","sound":"street noise"}`)
 
-	prompt, _, err := buildVideoPrompt(long, 5)
+	prompt, _, err := buildVideoPrompt(long, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -589,7 +589,7 @@ func TestNarrationThatFitsIsLeftAlone(t *testing.T) {
 		"lines":["Город утвердил правила для самокатов."],
 		"camera":"a slow pan","sound":"street noise"}`)
 
-	prompt, _, err := buildVideoPrompt("длинная новость про самокаты и правила", 10)
+	prompt, _, err := buildVideoPrompt("длинная новость про самокаты и правила", 10, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -631,7 +631,7 @@ func TestDialogueSceneIsNotHandedToANarrator(t *testing.T) {
 		"lines":["Ты был мне как брат","Ненавижу!"],
 		"camera":"a tracking shot","sound":"the hum of blades"}`)
 
-	prompt, _, err := buildVideoPrompt(`дуэль на мечах, первый кричит «Ты был мне как брат», второй кричит «Ненавижу!»`, 15)
+	prompt, _, err := buildVideoPrompt(`дуэль на мечах, первый кричит «Ты был мне как брат», второй кричит «Ненавижу!»`, 15, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestNarratorKeepsItsOwnIntro(t *testing.T) {
 		"scene":"A city street. Nobody in the shot speaks. An unseen narrator tells over the footage:",
 		"lines":["Город утвердил правила"],"camera":"a slow pan","sound":"street noise"}`)
 
-	prompt, _, err := buildVideoPrompt("город утвердил правила для самокатов", 5)
+	prompt, _, err := buildVideoPrompt("город утвердил правила для самокатов", 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -670,12 +670,74 @@ func TestSpeaksSceneKeepsAProperIntro(t *testing.T) {
 	planLLM(t, `{"form":"speaks","scene":"A woman turns to the camera and then she says:",
 		"lines":["привет"],"camera":"a push-in","sound":"a quiet room"}`)
 
-	prompt, _, err := buildVideoPrompt(`женщина говорит «привет»`, 5)
+	prompt, _, err := buildVideoPrompt(`женщина говорит «привет»`, 5, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	if !strings.Contains(prompt, "and then she says: "+speechOpen) {
 		t.Errorf("правильную подводку испортили: %q", prompt)
+	}
+}
+
+// TestLinesNeverDangle is a production case of 11.11.2026, reported by the
+// owner: three lines were glued to the end of a story that finished with
+// "...and leads her to the bed", with no colon and no introducing words
+// anywhere in the scene. H3 reads aloud whatever stands where a quote belongs,
+// and with nothing marking that place it invented a language — the person got
+// three replies in no language at all.
+//
+// The guarantee used to live in code, was moved into the system prompt the
+// same morning, and the move was measured: the model hands over by itself in
+// 28 scenes of 38. This test is the missing quarter.
+func TestLinesNeverDangle(t *testing.T) {
+	planLLM(t, `{"form":"dialogue",
+		"scene":"A man and a woman argue in a room. He takes out a phone, sits on the sofa and watches videos. She gets angry and Sonic leads her to the bed",
+		"lines":["Гена, дай секс","Нет, я устал","Ну и пожалуйста"],
+		"camera":"a static wide shot","sound":"indoor ambience"}`)
+
+	prompt, _, err := buildVideoPrompt("мужчина и женщина ругаются, она кричит «Ну и пожалуйста»", 15, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	line := strings.Index(prompt, speechOpen)
+	if line < 0 {
+		t.Fatalf("реплики пропали: %q", prompt)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(prompt[:line]), ":") {
+		t.Errorf("реплики висят в воздухе, без подводки: %q", prompt)
+	}
+	if strings.Count(prompt, speechOpen) != 3 {
+		t.Errorf("трёх говорящих склеили: %q", prompt)
+	}
+}
+
+// TestSceneThatIntroducesSpeechIsLeftAlone: the repair must not fire on a
+// scene that already hands over, however it worded it.
+func TestSceneThatIntroducesSpeechIsLeftAlone(t *testing.T) {
+	for _, ending := range []string{
+		"and then she says:",
+		"and the second man replies:",
+		"he turns to the camera and shouts:",
+		"she whispers to him:",
+	} {
+		scene := "Two people in a room, " + ending
+		if got := ownVoice(scene, formDialogue); got != scene {
+			t.Errorf("испортили готовую подводку %q: %q", ending, got)
+		}
+	}
+}
+
+// TestSilentSceneIsNeverGivenSpeech: the repair is for forms where somebody
+// speaks, and asking a silent scene to hand over to nothing would contradict
+// the request for silence that follows it.
+func TestSilentSceneIsNeverGivenSpeech(t *testing.T) {
+	scene := "A cat sleeps on a windowsill"
+	if got := ownVoice(scene, formSilent); got != scene {
+		t.Errorf("молчаливой сцене приписали речь: %q", got)
+	}
+	if got := ownVoice(scene, formNarrator); got != scene {
+		t.Errorf("сцену диктора тронули: %q", got)
 	}
 }

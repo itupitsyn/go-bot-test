@@ -52,13 +52,13 @@ func TestVideoFormProbe(t *testing.T) {
 	}
 
 	for _, c := range videoFormCases {
-		plan, err := planVideo(c.text, 5)
+		plan, err := planVideo(c.text, 5, "")
 		if err != nil {
 			t.Errorf("%s: %v", c.name, err)
 			continue
 		}
 
-		prompt, _, err := buildVideoPrompt(c.text, 5)
+		prompt, _, err := buildVideoPrompt(c.text, 5, "")
 		if err != nil {
 			t.Errorf("%s: сборка: %v", c.name, err)
 			continue
