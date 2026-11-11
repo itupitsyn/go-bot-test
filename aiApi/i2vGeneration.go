@@ -141,7 +141,7 @@ func getI2VId(prompt string, imageBytes []byte, imageName string, imgSize ImgSiz
 }
 
 func generateI2V(prompt string, imageBytes []byte, imageName string, seconds float64, caller Caller) (error, []byte) {
-	videoPrompt, origin, err := buildVideoPrompt(prompt)
+	videoPrompt, origin, err := buildVideoPrompt(prompt, seconds)
 	if err != nil {
 		return err, nil
 	}
