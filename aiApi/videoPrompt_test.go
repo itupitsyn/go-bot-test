@@ -156,8 +156,8 @@ func TestSceneRequestAsksForSilence(t *testing.T) {
 	if strings.Contains(prompt, speechOpen) {
 		t.Errorf("в молчаливой сцене появилась разметка реплики: %q", prompt)
 	}
-	if !strings.Contains(prompt, noSpeechClause) {
-		t.Errorf("сцена не просит тишины, а это и есть лечение зачитывания: %q", prompt)
+	if strings.Contains(prompt, noSpeechClause) {
+		t.Errorf("вернулась фраза про тишину, а она глушит пение (см. noSpeechClause): %q", prompt)
 	}
 	if strings.Contains(origin.Style, speechStyleMark) {
 		t.Errorf("сцене приписали речь: %q", origin.Style)
@@ -296,8 +296,8 @@ func TestDefaultAnimationPromptSkipsTheLLM(t *testing.T) {
 	if !strings.Contains(strings.ToLower(prompt), DefaultAnimationPrompt) {
 		t.Errorf("заготовка для фото без подписи потерялась: %q", prompt)
 	}
-	if !strings.Contains(prompt, noSpeechClause) {
-		t.Errorf("молчаливая сцена не просит тишины: %q", prompt)
+	if strings.Contains(prompt, noSpeechClause) {
+		t.Errorf("вернулась фраза про тишину (см. noSpeechClause): %q", prompt)
 	}
 	if strings.Contains(origin.Style, speechStyleMark) {
 		t.Errorf("стиль собран неверно: %q", origin.Style)
@@ -334,8 +334,8 @@ func TestDescriptionIsNotRecitedAloud(t *testing.T) {
 	if strings.Contains(prompt, speechOpen) {
 		t.Errorf("описание уехало репликой: %q", prompt)
 	}
-	if !strings.Contains(prompt, noSpeechClause) {
-		t.Errorf("реплику убрали, а тишины не попросили: %q", prompt)
+	if strings.Contains(prompt, noSpeechClause) {
+		t.Errorf("вернулась фраза про тишину (см. noSpeechClause): %q", prompt)
 	}
 	if strings.Contains(strings.ToLower(prompt), "and then") {
 		t.Errorf("сцена осталась с передачей слова, а говорить уже некому: %q", prompt)

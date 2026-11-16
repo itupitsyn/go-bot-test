@@ -61,11 +61,22 @@ const (
 	speechClose = "</d>"
 )
 
-// noSpeechClause is appended when there is no line. The absence of a <d> block
-// by itself was not enough -- that is exactly how the reciting videos were
-// made -- and a negative prompt is not available: H3 samples through
-// BasicGuider, with a single conditioning and no guidance, so there is nowhere
-// to put "no speech" except the prompt itself.
+// noSpeechClause USED TO BE appended whenever there was no line. It came in on
+// 20.10.2026 against the reciting videos: in those days the scene went to H3 in
+// Russian, and the model read the request out loud.
+//
+// REMOVED 16.11.2026. The scene is English again and the plan now decides the
+// form of speech explicitly, so the reason is gone, and the clause had started
+// doing harm: it silenced every voice that is not a quoted line. Measured on the
+// production graph (HyperFlow 8), one seed, the same prompts with and without it:
+//
+//	man sings with a guitar   -30.5 LUFS, no voice   vs  -11.3, singing
+//	Trump quacks and poops    identical spectrogram, nobody recites either way
+//	Zelensky eats; borscht    identical, silent either way
+//
+// The journal held exactly such losses: "мужик надрывно поёт", "оркестр гусей
+// играет «Мою оборону»", "собака читает Коран вслух" all got the clause. It is
+// kept as a constant only so the tests can make sure it does not come back.
 const noSpeechClause = "Nobody speaks and there is no voice-over: the soundtrack carries only the sounds of the scene itself."
 
 // defaultSpeakerSubject is the scene for a request that is nothing but a line
@@ -734,9 +745,6 @@ func buildVideoPrompt(msgText string, seconds float64, photo string) (string, pr
 		parts[0] += " " + speechBlocks(plan.Lines, plan.Form)
 	}
 	parts = append(parts, plan.Camera, plan.Sound)
-	if len(plan.Lines) == 0 {
-		parts = append(parts, noSpeechClause)
-	}
 
 	return joinSentences(parts), origin, nil
 }

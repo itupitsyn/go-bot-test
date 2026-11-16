@@ -41,7 +41,10 @@ const photoDescriptionPrompt = "You describe a photograph that is about to be " 
 	"If a person is visible, say so plainly and whether the face is turned " +
 	"to the camera.\n" +
 	"Describe only what is in the picture. Do not guess at names, do not " +
-	"invent a story, do not judge, do not mention the photograph itself."
+	"invent a story, do not judge, do not mention the photograph itself.\n" +
+	// "No people are present" read to the plan as a rule for the whole video,
+	// and the person the request brought in never came (16.11.2026).
+	"Do not say what is NOT in the picture."
 
 func buildPhotoDescriptionRequest(image []byte) ([]byte, error) {
 	dataURL := fmt.Sprintf("data:%s;base64,%s", http.DetectContentType(image),
@@ -103,10 +106,22 @@ func describeVideoPhoto(image []byte) string {
 // the conversation, next to the request it belongs to, for the same reason the
 // budget does: it changes with every request, and a system prompt that changes
 // per request cannot be tested.
-const photoNote = "\n\n(К просьбе приложена фотография — именно она станет " +
-	"первым кадром. На ней: %s. Сцена должна быть про то, что на снимке, а не " +
-	"про выдуманную обстановку. Если на фотографии человек, а в просьбе есть " +
-	"фраза без пометок, это почти наверняка просьба произнести её вслух.)"
+//
+// FIXED 16.11.2026. The note used to say "the scene must be about what is on
+// the photo, not about an invented setting". Meant for the setting, it was read
+// as being about the whole scene: whenever the request brought in something the
+// photo did not have ("в кадр заходит толстый пьяный мужик…" over a photo of a
+// desk), the plan sided with the photo and returned its description with the
+// request thrown out. See TestVideoPhotoKeepProbe. The photo is only where the
+// video STARTS; what happens next is the request, and the note now says so.
+const photoNote = "\n\n(К просьбе приложена фотография — она станет только " +
+	"первым кадром. На ней: %s. Обстановку и тех, кто уже в кадре, бери со " +
+	"снимка, а не выдумывай. Но всё, что дальше происходит, — это просьба " +
+	"человека, целиком и по порядку, даже если на снимке этого нет: кто в " +
+	"просьбе входит в кадр, тот входит; что в просьбе делают, то и делают. " +
+	"Опиши кадр одним коротким предложением, а остальная сцена — просьба. " +
+	"Если на фотографии человек, а в просьбе есть фраза без пометок, это " +
+	"почти наверняка просьба произнести её вслух.)"
 
 func photoContext(photo string) string {
 	if photo == "" {
